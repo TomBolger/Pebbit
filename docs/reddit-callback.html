@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pebbit Reddit Sign In</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --reddit: #c73700;
+      --soft: #ffd166;
+      --ink: #17202a;
+      --muted: #607080;
+      --line: #d8dee6;
+      --surface: #ffffff;
+      --page: #f6f7f8;
+    }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--page);
+      color: var(--ink);
+    }
+    main {
+      max-width: 620px;
+      margin: 0 auto;
+      padding: 22px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 16px;
+      margin-top: 16px;
+    }
+    .code {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 58px;
+      border: 2px solid var(--soft);
+      border-radius: 6px;
+      padding: 12px;
+      font: 16px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      word-break: break-all;
+      background: #fff8dc;
+      color: var(--ink);
+    }
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 6px;
+      margin-top: 12px;
+      padding: 12px;
+      background: var(--reddit);
+      color: white;
+      font: inherit;
+      font-weight: 800;
+    }
+    p {
+      color: var(--muted);
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Pebbit Reddit Sign In</h1>
+    <p>Copy this authorization code into Pebbit settings. Do not include the trailing <code>#_</code> if you copy from the address bar, though Pebbit will strip it if you do.</p>
+    <section class="panel">
+      <div id="code" class="code">No code found in the URL.</div>
+      <button id="copy" type="button">Copy Code</button>
+      <p id="status"></p>
+    </section>
+  </main>
+  <script>
+    function readParams() {
+      var result = {};
+      function read(raw) {
+        raw.split('&').forEach(function(part) {
+          if (!part) return;
+          var separator = part.indexOf('=');
+          var key = separator === -1 ? part : part.substring(0, separator);
+          var value = separator === -1 ? '' : part.substring(separator + 1);
+          result[decodeURIComponent(key)] = decodeURIComponent(value.replace(/\+/g, ' '));
+        });
+      }
+      if (window.location.search) read(window.location.search.substring(1));
+      if (window.location.hash) read(window.location.hash.substring(1).replace(/^_&?/, ''));
+      return result;
+    }
+    var params = readParams();
+    var code = params.code || '';
+    var codeNode = document.getElementById('code');
+    var statusNode = document.getElementById('status');
+    if (code) {
+      codeNode.textContent = code;
+      statusNode.textContent = 'Paste this into Pebbit settings, then save.';
+    } else if (params.error) {
+      codeNode.textContent = params.error;
+      statusNode.textContent = params.error_description || 'Reddit did not return an authorization code.';
+    }
+    document.getElementById('copy').onclick = function() {
+      if (!code) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(function() {
+          statusNode.textContent = 'Copied.';
+        }, function() {
+          statusNode.textContent = 'Select the code and copy it manually.';
+        });
+      } else {
+        statusNode.textContent = 'Select the code and copy it manually.';
+      }
+    };
+  </script>
+</body>
+</html>

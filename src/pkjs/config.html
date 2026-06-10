@@ -1,0 +1,357 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pebbit Settings</title>
+  <style>
+    :root {
+      --reddit: #ff4500;
+      --ink: #17202a;
+      --muted: #607080;
+      --line: #c9d2dc;
+      --panel-line: #d6dde5;
+      --page: #f4f6f8;
+      --surface: #ffffff;
+      --secondary: #e5edf3;
+      --dark: #334155;
+    }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--page);
+      color: var(--ink);
+    }
+    main {
+      max-width: 620px;
+      margin: 0 auto;
+      padding: 18px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 26px;
+      font-weight: 800;
+    }
+    .lede, .hint {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .lede {
+      margin: 0 0 16px;
+    }
+    .panel {
+      margin: 14px 0;
+      padding: 12px;
+      border: 1px solid var(--panel-line);
+      border-radius: 6px;
+      background: var(--surface);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    label {
+      display: block;
+      margin: 15px 0 6px;
+      font-weight: 700;
+    }
+    input, textarea, select {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 11px;
+      font: inherit;
+      background: var(--surface);
+      color: var(--ink);
+    }
+    textarea {
+      min-height: 84px;
+      resize: vertical;
+    }
+    .toggle {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 14px;
+    }
+    .toggle input {
+      width: auto;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+    }
+    button, .btn {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      border: 0;
+      border-radius: 6px;
+      background: var(--reddit);
+      color: #ffffff;
+      padding: 12px;
+      margin-top: 12px;
+      font: inherit;
+      font-weight: 800;
+      text-align: center;
+      text-decoration: none;
+    }
+    .secondary {
+      background: var(--secondary);
+      color: var(--ink);
+    }
+    .danger {
+      background: var(--dark);
+      color: #ffffff;
+    }
+    .savebar {
+      position: sticky;
+      bottom: 0;
+      background: var(--page);
+      padding: 10px 0;
+    }
+    details {
+      margin-top: 14px;
+    }
+    summary {
+      font-weight: 700;
+    }
+    .status {
+      margin-top: 10px;
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Pebbit</h1>
+    <p class="lede">Personal Reddit client settings. No post creation is exposed in this app.</p>
+
+    <section class="panel">
+      <strong>Status:</strong> <span id="signedInStatus">Not signed in.</span>
+      <p class="hint">Register a Reddit installed app, set its redirect URI to the value below, save, open this page again, then sign in and paste either the code or the full redirected URL. Pebbit ignores trailing #_ automatically.</p>
+      <p class="hint">Hosted callback: <code>https://tombolger.github.io/Pebbit/reddit-callback.html</code><br>Local fallback: <code>http://localhost:65010/pebbit</code></p>
+      <a id="signin" class="btn" href="#">Sign in with Reddit</a>
+    </section>
+
+    <label for="clientId">Reddit client ID</label>
+    <input id="clientId" type="text" placeholder="Installed app client ID">
+
+    <label for="redirectUri">Redirect URI</label>
+    <input id="redirectUri" type="text">
+
+    <label for="code">Authorization code</label>
+    <input id="code" type="text" placeholder="Paste code or full redirected URL">
+
+    <label for="defaultFeed">Default feed</label>
+    <select id="defaultFeed">
+      <option value="front">Front Page</option>
+      <option value="hot">Hot</option>
+      <option value="trending">Trending</option>
+      <option value="saved">Saved</option>
+    </select>
+
+    <label for="commentSort">Comment sort</label>
+    <select id="commentSort">
+      <option value="confidence">Best</option>
+      <option value="top">Top</option>
+      <option value="new">New</option>
+      <option value="controversial">Controversial</option>
+      <option value="old">Old</option>
+    </select>
+
+    <label for="subreddits">Visible subreddits</label>
+    <textarea id="subreddits" placeholder="pebble&#10;pebblewatch&#10;programming"></textarea>
+
+    <label for="hiddenSubreddits">Hidden subreddits</label>
+    <textarea id="hiddenSubreddits" placeholder="One subreddit per line"></textarea>
+
+    <label for="mediaMode">Media loading</label>
+    <select id="mediaMode">
+      <option value="off">Off</option>
+      <option value="selected">Selected only</option>
+      <option value="nearby">Near viewport</option>
+    </select>
+
+    <label for="cannedReplies">Canned replies</label>
+    <textarea id="cannedReplies" placeholder="Yes&#10;No&#10;Thanks"></textarea>
+
+    <label class="toggle"><input id="showNsfw" type="checkbox"> Show NSFW rows</label>
+    <label class="toggle"><input id="mockMode" type="checkbox"> Use mock data</label>
+
+    <details>
+      <summary>Advanced</summary>
+      <label for="scopes">OAuth scopes</label>
+      <input id="scopes" type="text">
+    </details>
+
+    <div class="savebar">
+      <button id="save" type="button">Save</button>
+      <div class="row">
+        <button id="mock" class="secondary" type="button">Use mock data</button>
+        <button id="signout" class="danger" type="button">Sign out</button>
+      </div>
+    </div>
+    <div id="status" class="status"></div>
+  </main>
+
+  <script>
+    function params() {
+      var result = {};
+      function read(raw) {
+        raw.split('&').forEach(function(part) {
+          if (!part) return;
+          var separator = part.indexOf('=');
+          var key = separator === -1 ? part : part.substring(0, separator);
+          var value = separator === -1 ? '' : part.substring(separator + 1);
+          result[decodeURIComponent(key)] = decodeURIComponent(value.replace(/\+/g, ' '));
+        });
+      }
+      if (window.location.search) read(window.location.search.substring(1));
+      if (window.location.hash) read(window.location.hash.substring(1));
+      return result;
+    }
+
+    function v(id) {
+      return document.getElementById(id);
+    }
+
+    function queryValue(name, fallback) {
+      return query[name] === undefined || query[name] === '' ? fallback : query[name];
+    }
+
+    function listText(value) {
+      return String(value || '').replace(/\|/g, '\n');
+    }
+
+    function lines(id) {
+      return v(id).value.split(/\n+/).map(function(item) {
+        return item.trim();
+      }).filter(function(item) {
+        return !!item;
+      }).join('|');
+    }
+
+    function cleanCode(value) {
+      value = String(value || '').trim();
+      var match = value.match(/[?&]code=([^&#]*)/);
+      if (match) {
+        value = match[1];
+      } else if (value.indexOf('code=') === 0) {
+        value = value.substring(5);
+      }
+      value = value.split('&')[0].split('#')[0].trim();
+      try {
+        value = decodeURIComponent(value.replace(/\+/g, ' '));
+      } catch (e) {
+      }
+      return value;
+    }
+
+    function formBody(data) {
+      var parts = [];
+      Object.keys(data).forEach(function(key) {
+        parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(data[key]));
+      });
+      return parts.join('&');
+    }
+
+    function authUrl() {
+      var clientId = v('clientId').value.trim();
+      if (!clientId) return '';
+      return 'https://www.reddit.com/api/v1/authorize?' + formBody({
+        client_id: clientId,
+        response_type: 'code',
+        state: String(Date.now()),
+        redirect_uri: v('redirectUri').value.trim() || defaultRedirectUri,
+        duration: 'permanent',
+        scope: v('scopes').value.trim() || defaultScopes
+      });
+    }
+
+    function updateSignin() {
+      var url = authUrl();
+      var signin = v('signin');
+      if (url) {
+        signin.href = url;
+        signin.className = 'btn';
+      } else {
+        signin.href = '#';
+        signin.className = 'btn secondary';
+      }
+    }
+
+    function closeWith(data) {
+      var returnTo = query.return_to || 'pebblejs://close#';
+      var separator = returnTo.indexOf('#') === -1 ? '#' : '';
+      document.location = returnTo + separator + encodeURIComponent(JSON.stringify(data));
+    }
+
+    function payload(action) {
+      return {
+        mode: 'reddit',
+        action: action,
+        clientId: v('clientId').value.trim(),
+        redirectUri: v('redirectUri').value.trim() || defaultRedirectUri,
+        code: cleanCode(v('code').value),
+        defaultFeed: v('defaultFeed').value,
+        commentSort: v('commentSort').value,
+        subreddits: lines('subreddits'),
+        hiddenSubreddits: lines('hiddenSubreddits'),
+        mediaMode: v('mediaMode').value,
+        cannedReplies: lines('cannedReplies'),
+        showNsfw: v('showNsfw').checked ? '1' : '',
+        mockMode: v('mockMode').checked ? '1' : '0',
+        scopes: v('scopes').value.trim() || defaultScopes
+      };
+    }
+
+    function close(action) {
+      closeWith(payload(action));
+    }
+
+    var query = params();
+    var defaultScopes = 'identity read mysubreddits vote save submit edit';
+    var defaultRedirectUri = 'https://tombolger.github.io/Pebbit/reddit-callback.html';
+    var defaultSubreddits = 'pebble|pebblewatch|programming|technology|AskReddit';
+    var defaultReplies = 'Yes|No|Thanks|I agree|Good point';
+
+    v('clientId').value = queryValue('clientId', '');
+    v('redirectUri').value = queryValue('redirectUri', defaultRedirectUri);
+    v('code').value = queryValue('code', '');
+    v('defaultFeed').value = queryValue('defaultFeed', 'front');
+    v('commentSort').value = queryValue('commentSort', 'confidence');
+    v('subreddits').value = listText(queryValue('subreddits', defaultSubreddits));
+    v('hiddenSubreddits').value = listText(queryValue('hiddenSubreddits', ''));
+    v('mediaMode').value = queryValue('mediaMode', 'selected');
+    v('cannedReplies').value = listText(queryValue('cannedReplies', defaultReplies));
+    v('showNsfw').checked = queryValue('showNsfw', '') === '1';
+    v('mockMode').checked = queryValue('mockMode', '') === '1';
+    v('scopes').value = queryValue('scopes', defaultScopes);
+    v('signedInStatus').textContent = query.refreshToken || query.signedIn === '1' ? 'Reddit refresh token saved.' : 'Not signed in.';
+
+    v('clientId').addEventListener('input', updateSignin);
+    v('redirectUri').addEventListener('input', updateSignin);
+    v('scopes').addEventListener('input', updateSignin);
+    v('signin').addEventListener('click', function(event) {
+      if (!authUrl()) {
+        event.preventDefault();
+        v('status').textContent = 'Add a Reddit client ID first, then save and reopen settings.';
+      }
+    });
+    v('save').addEventListener('click', function() {
+      close('save');
+    });
+    v('mock').addEventListener('click', function() {
+      v('mockMode').checked = true;
+      close('mock');
+    });
+    v('signout').addEventListener('click', function() {
+      close('signout');
+    });
+    updateSignin();
+  </script>
+</body>
+</html>

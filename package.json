@@ -1,0 +1,77 @@
+{
+  "name": "Pebbit",
+  "author": "Bolger Innovations",
+  "version": "0.1.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "pebble": {
+    "displayName": "Pebbit",
+    "uuid": "f54ed9a8-12db-4282-92c5-536f1190e73f",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery",
+      "basalt",
+      "gabbro"
+    ],
+    "capabilities": [
+      "configurable"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [
+      "Command",
+      "Type",
+      "Index",
+      "Count",
+      "ChatId",
+      "MessageId",
+      "ReplyTo",
+      "Sender",
+      "Text",
+      "IsOutgoing",
+      "IsUnread",
+      "UnreadCount",
+      "BridgeUrl",
+      "CannedReplies",
+      "PlannerLabels",
+      "Status",
+      "Error",
+      "ImageToken",
+      "ImageData",
+      "ImageSize",
+      "ImageTransferId",
+      "ImageWidth",
+      "ImageHeight",
+      "Reactions",
+      "EditMessageId",
+      "ReplySender",
+      "ReplyText",
+      "ForwardSender",
+      "ForwardText",
+      "MessageMeta",
+      "Section",
+      "PlanId",
+      "BucketId",
+      "TaskId",
+      "ChecklistId",
+      "DueDate",
+      "PercentComplete",
+      "ETag",
+      "Action",
+      "LaunchCode"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "bitmap",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        }
+      ]
+    }
+  }
+}
