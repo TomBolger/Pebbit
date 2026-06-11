@@ -273,3 +273,32 @@ Phase 5: Daily-driver polish
 - Replaced the Pebble menu icon/source art with Reddit artwork from the Pebble iconography source.
 - Updated watch colors/layout for Reddit: orange/yellow palette, top post as a card, left-aligned comments with small indents and orange rails.
 - Verified with Node syntax checks and `pebble build`; output remains `build/Pebbit.pbw` and is copied to `I:\My drive`.
+- Delegated the required implementation review work from Plan Execution: one worker focused on watch UI/action changes and one worker focused on backend/media/comment normalization. Integrated the backend worker results and closed the still-running watch worker after local implementation and verification.
+- Changed opened Reddit threads so the initial detail view selects the OP/top card and scrolls downward into comments instead of opening at the bottom like a chat.
+- Updated post/comment actions to remove visible React menus from Reddit detail cards and expose Reply, Upvote, Downvote, and Save through direct Reddit action commands. Reply targets the selected bubble/comment.
+- Changed comment normalization so nested comments no longer get fake quote panels. Quote context is now reserved for explicit/recent Pebbit replies.
+- Added simple hidden-reply summary rows for large reply branches so long Reddit conversations are partially collapsed on the watch.
+- Expanded media extraction for post rows across all post list views, including front page, hot/trending/saved, subreddit posts, Reddit previews/galleries/video thumbnails, and direct Imgur image/page thumbnails. Text-only posts do not reserve thumbnail space.
+- Changed list thumbnails and opened media frames to square/rectangular rendering instead of circular masks.
+- Updated metadata strings to compact Reddit-style arrows and awards: up/down arrows in metadata and award emoji/count on the opposite side when available.
+- Trimmed donor Planner/static UI buffers and unused marker drawing to keep all target platforms under Pebble's 16-bit app virtual-size limit.
+- Verified with `node --check src/pkjs/index.js`, `node --check src/pkjs/reddit/backend.js`, `git diff --check`, and `pebble build`. Output: `build/Pebbit.pbw`.
+
+2026-06-11:
+- Delegated the required crash investigation from Plan Execution: one explorer audited phone-side Reddit/list/comment streaming and one explorer audited watch-side thread-opening crash risks.
+- Capped phone-side list rows to the watch capacity of 12 so `chats_done` no longer reports rows the watch cannot store.
+- Filtered Reddit listing rows to posts for feed/subreddit overviews and fail clearly on stale/expired post tokens instead of opening malformed `/comments/p1` URLs.
+- Fixed Reddit thread ordering so initial detail windows preserve the OP/top card plus first comments instead of sorting or tail-selecting later comments.
+- Routed feed post rows through Reddit detail mode so opened threads start at the OP card and scroll downward into comments.
+- Added low-memory guards for thread layer creation and action window/layer creation to avoid NULL dereferences under heap pressure.
+- Disabled automatic media fetch on Reddit thread open and tightened bitmap decode headroom checks; media placeholders remain, but native decode is no longer kicked off simply by opening a thread.
+- Updated Reddit detail metadata rendering to display the compact arrow/comment/time string as sent by the backend instead of parsing it as legacy `up|down` counters.
+- Verified with Node syntax checks, `git diff --check`, `pebble build`, and Basalt emulator open-thread testing. The feed loads, opening a thread lands on the OP card, and the emulator stays alive. Output copied to `I:\My drive\Pebbit.pbw`.
+- Narrowed active target platforms to Emery for development so crash/media work can focus on the actual test watch.
+- Fixed post-list media previews by starting the existing thumbnail transfer queue from every post/list row batch, not only the initial top-level navigation load.
+- Re-enabled selected image loading in Reddit thread detail and cleared stale image/avatar transfer buffers before opening a thread to reduce Emery heap pressure.
+- Fixed phone-side media downloads in Pebble JS runtimes by adding an XMLHttpRequest binary fallback when `fetch` is unavailable.
+- Made Reddit detail state explicit so feed posts use Reddit comment actions/layout without corrupting Back navigation state.
+- Changed phone-to-watch message transfer counts to report rows actually sent after trimming, preventing the watch from waiting for nonexistent comment rows.
+- Reduced first thread/comment packets and real comment flattening to a smaller Emery-safe window while crash testing continues.
+- Verified on the Emery emulator: feed opens, the media post row renders an actual square thumbnail, opening the media thread starts at the OP card, the OP image loads, and the emulator remains alive. Output copied to `I:\My drive\Pebbit.pbw`.

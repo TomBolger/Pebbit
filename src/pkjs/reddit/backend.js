@@ -10,6 +10,9 @@ var DEFAULT_REDIRECT_URI = 'https://tombolger.github.io/Pebbit/reddit-callback.h
 var DEFAULT_SUBREDDITS = 'pebble|pebblewatch|programming|technology|AskReddit';
 var USER_AGENT = 'Pebbit/0.1 personal PebbleOS client by u/tombolger';
 var MAX_CACHE_MS = 5 * 60 * 1000;
+var MAX_VISIBLE_REPLIES_PER_COMMENT = 3;
+var MAX_COMMENT_ROWS = 16;
+var MAX_LISTING_ROWS = 12;
 
 var tokenMaps = {
   post: {},
@@ -37,6 +40,7 @@ var postRowsByFeed = {};
 var commentsByPost = {};
 var fullTextById = {};
 var savedByToken = {};
+var recentReplyQuotes = {};
 var actionInFlight = false;
 var tokenPromise = null;
 
@@ -125,6 +129,70 @@ function compactNumber(value) {
     return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
   }
   return String(n);
+}
+
+function countValue(value) {
+  var n = Number(value || 0);
+  return isFinite(n) && n > 0 ? n : 0;
+}
+
+function scoreParts(thing) {
+  thing = thing || {};
+  var ups = countValue(thing.ups);
+  var downs = countValue(thing.downs);
+  var score = Number(thing.score || 0);
+  var parts = [];
+  if (!ups && score > 0) {
+    ups = score;
+  }
+  if (ups) {
+    parts.push('\u2191' + compactNumber(ups));
+  } else if (score) {
+    parts.push((score < 0 ? '\u2193' : '\u2191') + compactNumber(Math.abs(score)));
+  }
+  if (downs) {
+    parts.push('\u2193' + compactNumber(downs));
+  }
+  return parts;
+}
+
+function awardText(thing) {
+  thing = thing || {};
+  var awards = thing.all_awardings || [];
+  var total = countValue(thing.total_awards_received);
+  if (!total && awards.length) {
+    awards.forEach(function(award) {
+      total += countValue(award && award.count) || 1;
+    });
+  }
+  if (!total) {
+    return '';
+  }
+  return '\ud83c\udfc5' + compactNumber(total);
+}
+
+function postMeta(post) {
+  var parts = scoreParts(post);
+  if (post && post.num_comments !== undefined) {
+    parts.push('\ud83d\udcac' + compactNumber(post.num_comments || 0));
+  }
+  parts.push(ageText(post && post.created_utc));
+  if (post && post.saved) {
+    parts.push('saved');
+  }
+  return parts.join(' ');
+}
+
+function commentMeta(comment) {
+  var parts = scoreParts(comment);
+  parts.push(ageText(comment && comment.created_utc));
+  if (comment && comment.edited && comment.edited !== false) {
+    parts.push('edited');
+  }
+  if (comment && comment.saved) {
+    parts.push('saved');
+  }
+  return parts.join(' ');
 }
 
 function ageText(createdUtc) {
@@ -288,6 +356,35 @@ function reddit(path, options) {
   });
 }
 
+function imageBytesFromUrl(url, label) {
+  if (typeof fetch === 'function') {
+    return fetch(url).then(function(response) {
+      if (!response.ok) {
+        throw new Error(label + ' download failed');
+      }
+      return response.arrayBuffer();
+    }).then(function(buffer) {
+      return new Uint8Array(buffer);
+    });
+  }
+  return new Promise(function(resolve, reject) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'arraybuffer';
+    xhr.onload = function() {
+      if ((xhr.status >= 200 && xhr.status < 300) || xhr.status === 0) {
+        resolve(new Uint8Array(xhr.response));
+      } else {
+        reject(new Error(label + ' download failed'));
+      }
+    };
+    xhr.onerror = function() {
+      reject(new Error(label + ' download failed'));
+    };
+    xhr.send();
+  });
+}
+
 function mockPosts(feed) {
   var base = [
     {
@@ -314,7 +411,7 @@ function mockPosts(feed) {
       num_comments: 312,
       created_utc: nowSeconds() - 7400,
       domain: 'example.com',
-      url: 'https://picsum.photos/480/320',
+      url: 'https://picsum.photos/480/320.jpg',
       saved: true,
       likes: true
     },
@@ -356,13 +453,9 @@ var mockComments = {
 };
 
 function postPreview(post) {
-  var parts = ['r/' + post.subreddit, 'u/' + post.author, compactNumber(post.score) + ' pts',
-    compactNumber(post.num_comments) + ' c', ageText(post.created_utc)];
+  var parts = ['r/' + post.subreddit, 'u/' + post.author, postMeta(post)];
   if (post.domain && post.domain.indexOf('self.') !== 0) {
     parts.push(post.domain);
-  }
-  if (post.saved) {
-    parts.push('saved');
   }
   return parts.join(' - ');
 }
@@ -391,7 +484,41 @@ function normalizePost(data) {
 }
 
 function validImageUrl(url) {
-  return !!url && /^https?:\/\//i.test(url) && /\.(png|jpe?g|webp)(\?|$)/i.test(url);
+  return !!url && /^https?:\/\//i.test(url) && /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url);
+}
+
+function hostName(url) {
+  var match = String(url || '').match(/^https?:\/\/([^\/?#]+)/i);
+  return match ? match[1].toLowerCase() : '';
+}
+
+function isRedditMediaHost(url) {
+  var host = hostName(url);
+  return /(^|\.)redd\.it$/.test(host) || /(^|\.)redditmedia\.com$/.test(host);
+}
+
+function imgurThumbnailUrl(url) {
+  var value = decodeHtml(url || '');
+  var match;
+  if (!/^https?:\/\//i.test(value)) {
+    return '';
+  }
+  match = value.match(/^https?:\/\/i\.imgur\.com\/([A-Za-z0-9]+)([a-z])?\.(?:gifv|mp4|png|jpe?g|webp|gif)(?:[?#].*)?$/i);
+  if (match) {
+    return 'https://i.imgur.com/' + match[1] + 'h.jpg';
+  }
+  match = value.match(/^https?:\/\/(?:www\.)?imgur\.com\/(?:r\/[^\/?#]+\/)?([A-Za-z0-9]+)(?:[?#].*)?$/i);
+  if (match) {
+    return 'https://i.imgur.com/' + match[1] + 'h.jpg';
+  }
+  return '';
+}
+
+function pushMediaCandidate(candidates, url) {
+  url = decodeHtml(url || '');
+  if (url && candidates.indexOf(url) < 0) {
+    candidates.push(url);
+  }
 }
 
 function redditPreviewImage(post) {
@@ -405,27 +532,45 @@ function redditPreviewImage(post) {
   return decodeHtml((candidate && candidate.url) || (image.source && image.source.url) || '');
 }
 
+function redditGalleryPreview(post) {
+  var metadata = post && post.media_metadata;
+  var gallery = post && post.gallery_data && post.gallery_data.items;
+  var item = gallery && gallery.length ? gallery[0] : null;
+  var media = item && metadata ? metadata[item.media_id] : null;
+  var previews = media && media.p;
+  var candidate = previews && previews.length ? previews[previews.length - 1] : (media && media.s);
+  return decodeHtml((candidate && (candidate.u || candidate.url)) || '');
+}
+
+function mediaEmbedThumbnail(media) {
+  if (media && media.oembed && validImageUrl(media.oembed.thumbnail_url)) {
+    return decodeHtml(media.oembed.thumbnail_url);
+  }
+  return '';
+}
+
 function bestMediaUrl(post) {
   if (!post) {
     return '';
   }
   var url = decodeHtml(post.url_overridden_by_dest || post.url || '');
   var preview = redditPreviewImage(post);
+  var galleryPreview = redditGalleryPreview(post);
   var thumbnail = decodeHtml(post.thumbnail || '');
-  if (validImageUrl(url)) {
-    return url;
-  }
-  if (validImageUrl(preview)) {
-    return preview;
-  }
-  if (validImageUrl(thumbnail)) {
-    return thumbnail;
-  }
-  if (post.media && post.media.oembed && validImageUrl(post.media.oembed.thumbnail_url)) {
-    return decodeHtml(post.media.oembed.thumbnail_url);
-  }
-  if (post.secure_media && post.secure_media.oembed && validImageUrl(post.secure_media.oembed.thumbnail_url)) {
-    return decodeHtml(post.secure_media.oembed.thumbnail_url);
+  var candidates = [];
+  pushMediaCandidate(candidates, preview);
+  pushMediaCandidate(candidates, galleryPreview);
+  pushMediaCandidate(candidates, thumbnail);
+  pushMediaCandidate(candidates, mediaEmbedThumbnail(post.secure_media));
+  pushMediaCandidate(candidates, mediaEmbedThumbnail(post.media));
+  pushMediaCandidate(candidates, imgurThumbnailUrl(url));
+  pushMediaCandidate(candidates, url);
+  for (var i = 0; i < candidates.length; i += 1) {
+    if (validImageUrl(candidates[i]) &&
+        (isRedditMediaHost(candidates[i]) || hostName(candidates[i]).indexOf('imgur.com') >= 0 ||
+         candidates[i] === url || candidates[i] === preview || candidates[i] === thumbnail)) {
+      return candidates[i];
+    }
   }
   return '';
 }
@@ -435,26 +580,54 @@ function normalizeComment(data, parentById) {
   var id = comment.name || comment.id || '';
   var token = tokenFor(comment.kind === 'more' || id.indexOf('more_') === 0 ? 'comment' : 'comment', id);
   var parent = parentById && parentById[comment.parent_id];
+  var quoteTime = parentById && parentById.__recentReplyQuotes && parentById.__recentReplyQuotes[comment.parent_id];
   var text = comment.kind === 'more' ? 'Load more comments' :
     plainText(comment.body || comment.body_html || '[deleted]');
-  var meta = compactNumber(comment.score || 0) + ' pts ' + ageText(comment.created_utc);
-  if (comment.edited && comment.edited !== false) {
-    meta += ' edited';
-  }
+  var meta = comment.kind === 'summary' ? '' : commentMeta(comment);
   var row = {
     id: token,
-    sender: comment.kind === 'more' ? 'More' : ('u/' + (comment.author || '[deleted]')),
+    sender: comment.kind === 'more' || comment.kind === 'summary' ? 'More' : ('u/' + (comment.author || '[deleted]')),
     text: text,
     meta: meta,
-    reactions: comment.saved ? 'saved' : '',
-    reply_sender: parent ? ('u/' + (parent.author || 'parent')) : '',
-    reply_text: parent ? plainText(parent.body || parent.title || '') : '',
+    reactions: comment.kind === 'summary' ? '' : awardText(comment),
     outgoing: !!comment.outgoing,
-    section: 'd' + Math.min(9, Number(comment.depth || 0))
+    section: comment.kind === 'summary' ? 'collapsed' :
+      (comment.kind === 'more' ? 'more' : ('d' + Math.min(9, Number(comment.depth || 0))))
   };
+  if ((comment.quote_parent || (quoteTime && Number(comment.created_utc || 0) >= quoteTime - 120)) && parent) {
+    row.reply_sender = parent.title ? ('r/' + (parent.subreddit || 'reddit')) : ('u/' + (parent.author || 'parent'));
+    row.reply_text = plainText(parent.body || parent.title || '');
+  }
   savedByToken[token] = !!comment.saved;
   fullTextById[token] = text;
   return row;
+}
+
+function countCommentTree(children) {
+  var count = 0;
+  (children || []).forEach(function(child) {
+    if (!child || !child.data) {
+      return;
+    }
+    count += 1;
+    if (child.kind !== 'more' && child.data.replies && child.data.replies.data) {
+      count += countCommentTree(child.data.replies.data.children);
+    }
+  });
+  return count;
+}
+
+function summaryComment(parentId, depth, hiddenCount) {
+  return {
+    kind: 'summary',
+    id: 'summary_' + parentId + '_' + hiddenCount,
+    name: 'summary_' + parentId + '_' + hiddenCount,
+    parent_id: parentId,
+    author: 'More',
+    body: compactNumber(hiddenCount) + ' more replies hidden',
+    depth: depth,
+    created_utc: nowSeconds()
+  };
 }
 
 function flattenComments(children, depth, rows, parentById) {
@@ -477,9 +650,20 @@ function flattenComments(children, depth, rows, parentById) {
     }
     child.data.depth = depth;
     parentById[child.data.name] = child.data;
+    parentById[child.data.id] = child.data;
     rows.push(child.data);
     if (child.data.replies && child.data.replies.data) {
-      flattenComments(child.data.replies.data.children, depth + 1, rows, parentById);
+      var replies = child.data.replies.data.children || [];
+      var visible = replies;
+      var hidden = 0;
+      if (replies.length > MAX_VISIBLE_REPLIES_PER_COMMENT) {
+        visible = replies.slice(0, MAX_VISIBLE_REPLIES_PER_COMMENT);
+        hidden = countCommentTree(replies.slice(MAX_VISIBLE_REPLIES_PER_COMMENT));
+      }
+      flattenComments(visible, depth + 1, rows, parentById);
+      if (hidden > 0) {
+        rows.push(summaryComment(child.data.name || child.data.id, depth + 1, hidden));
+      }
     }
   });
 }
@@ -499,17 +683,22 @@ function listingPath(feed, after) {
   } else {
     path = '/best';
   }
-  return path + '?limit=16' + (after ? '&after=' + encodeURIComponent(after) : '');
+  return path + '?limit=' + MAX_LISTING_ROWS + (after ? '&after=' + encodeURIComponent(after) : '');
 }
 
 function loadListing(feed) {
   if (isMockMode()) {
-    var rows = mockPosts(feed).map(normalizePost);
+    var rows = mockPosts(feed).slice(0, MAX_LISTING_ROWS).map(normalizePost);
     postRowsByFeed[feed] = rows;
     return Promise.resolve(rows);
   }
   return reddit(listingPath(feed)).then(function(data) {
-    var rows = (((data || {}).data || {}).children || []).map(normalizePost);
+    var rows = (((data || {}).data || {}).children || [])
+      .filter(function(child) {
+        return child && child.kind === 't3' && child.data;
+      })
+      .slice(0, MAX_LISTING_ROWS)
+      .map(normalizePost);
     postRowsByFeed[feed] = rows;
     return rows;
   });
@@ -518,14 +707,22 @@ function loadListing(feed) {
 function loadComments(postToken) {
   var post = postCache[postToken] || {};
   var real = realId('post', postToken);
+  if (!postCache[postToken] || real.indexOf('t3_') !== 0) {
+    return Promise.reject(new Error('Post expired. Refresh posts.'));
+  }
   if (isMockMode()) {
     var comments = (mockComments[real] || mockComments[post.id] || []).slice();
     var parentById = {};
     parentById[real] = post;
-    comments.forEach(function(row) { parentById[row.id] = row; });
+    parentById.__recentReplyQuotes = recentReplyQuotes[postToken] || {};
+    comments.forEach(function(row) {
+      parentById[row.id] = row;
+      parentById[row.name] = row;
+    });
     var rows = [postMessage(postToken)].concat(comments.map(function(row) {
       return normalizeComment(row, parentById);
     }));
+    rows.forEach(function(row, index) { row.sort_ts = index; });
     commentsByPost[postToken] = rows;
     return Promise.resolve(rows);
   }
@@ -540,10 +737,12 @@ function loadComments(postToken) {
     var flat = [];
     var parentById = {};
     parentById[real] = post;
+    parentById.__recentReplyQuotes = recentReplyQuotes[postToken] || {};
     flattenComments(listing, 0, flat, parentById);
-    var rows = [postMessage(postToken)].concat(flat.slice(0, 60).map(function(row) {
+    var rows = [postMessage(postToken)].concat(flat.slice(0, MAX_COMMENT_ROWS).map(function(row) {
       return normalizeComment(row, parentById);
     }));
+    rows.forEach(function(row, index) { row.sort_ts = index; });
     commentsByPost[postToken] = rows;
     return rows;
   });
@@ -559,9 +758,8 @@ function postMessage(postToken) {
     id: postToken,
     sender: 'r/' + (post.subreddit || 'reddit'),
     text: text || '[link post]',
-    meta: compactNumber(post.score || 0) + ' pts ' + compactNumber(post.num_comments || 0) + ' c ' +
-      ageText(post.created_utc),
-    reactions: post.saved ? 'saved' : '',
+    meta: postMeta(post),
+    reactions: awardText(post),
     outgoing: false,
     section: 'post',
     image_token: tokenMaps.url[postToken] ? postToken : '',
@@ -689,16 +887,24 @@ function voteThing(token, dir) {
 }
 
 function saveThing(token) {
+  return setSaveThing(token, null);
+}
+
+function setSaveThing(token, shouldSave) {
   var id = realId('post', token) || realId('comment', token);
   if (isMockMode()) {
-    savedByToken[token] = !savedByToken[token];
+    savedByToken[token] = shouldSave === null || shouldSave === undefined ? !savedByToken[token] : !!shouldSave;
     if (postCache[token]) postCache[token].saved = savedByToken[token];
     return Promise.resolve();
   }
   var post = postCache[token];
   var saved = savedByToken[token] !== undefined ? savedByToken[token] : (post && !!post.saved);
-  return reddit(saved ? '/api/unsave' : '/api/save', {method: 'POST', body: {id: id}}).then(function(result) {
-    savedByToken[token] = !saved;
+  var targetSaved = shouldSave === null || shouldSave === undefined ? !saved : !!shouldSave;
+  if (targetSaved === saved) {
+    return Promise.resolve();
+  }
+  return reddit(targetSaved ? '/api/save' : '/api/unsave', {method: 'POST', body: {id: id}}).then(function(result) {
+    savedByToken[token] = targetSaved;
     if (post) {
       post.saved = savedByToken[token];
     }
@@ -707,7 +913,9 @@ function saveThing(token) {
 }
 
 function replyThing(postToken, parentToken, text) {
-  var parent = parentToken ? realId('comment', parentToken) : realId('post', postToken);
+  var parent = parentToken ?
+    (realId('comment', parentToken) || realId('post', parentToken)) :
+    realId('post', postToken);
   if (!parent || !text) {
     return Promise.reject(new Error('Reply needs text'));
   }
@@ -722,10 +930,13 @@ function replyThing(postToken, parentToken, text) {
       score: 1,
       depth: parent.indexOf('t1_') === 0 ? 1 : 0,
       created_utc: nowSeconds(),
-      outgoing: true
+      outgoing: true,
+      quote_parent: true
     });
     return Promise.resolve();
   }
+  recentReplyQuotes[postToken] = recentReplyQuotes[postToken] || {};
+  recentReplyQuotes[postToken][parent] = nowSeconds();
   return reddit('/api/comment', {method: 'POST', body: {thing_id: parent, text: text, api_type: 'json'}});
 }
 
@@ -873,16 +1084,29 @@ function create(options) {
     sendReaction: function(postToken, messageToken, token) {
       return actionGuard(function() {
         var target = messageToken || postToken;
-        if (token === 'like') return voteThing(target, 1);
-        if (token === 'angry') return voteThing(target, -1);
-        if (token === 'remove') return voteThing(target, 0);
-        if (token === 'heart') return saveThing(target);
+        if (token === 'like' || token === 'upvote') return voteThing(target, 1);
+        if (token === 'angry' || token === 'dislike' || token === 'downvote') return voteThing(target, -1);
+        if (token === 'remove' || token === 'clear_vote') return voteThing(target, 0);
+        if (token === 'heart' || token === 'save') return setSaveThing(target, true);
+        if (token === 'unsave') return setSaveThing(target, false);
         return Promise.resolve();
+      });
+    },
+    thingAction: function(postToken, messageToken, action) {
+      return actionGuard(function() {
+        var target = messageToken || postToken;
+        if (action === 'upvote') return voteThing(target, 1);
+        if (action === 'downvote') return voteThing(target, -1);
+        if (action === 'clear_vote') return voteThing(target, 0);
+        if (action === 'save') return setSaveThing(target, true);
+        if (action === 'unsave') return setSaveThing(target, false);
+        if (action === 'toggle_save') return saveThing(target);
+        return Promise.reject(new Error('Action unavailable'));
       });
     },
     markRead: function() { return Promise.resolve(); },
     archiveChat: function(chatToken) {
-      return saveThing(chatToken);
+      return setSaveThing(chatToken, true);
     },
     markUnread: function(chatToken) {
       return voteThing(chatToken, 0);
@@ -894,12 +1118,7 @@ function create(options) {
         return Promise.reject(new Error('No selected media'));
       }
       return image.graphImageBytes(postToken, token, function() {
-        return fetch(url).then(function(response) {
-          if (!response.ok) throw new Error('image download failed');
-          return response.arrayBuffer();
-        }).then(function(buffer) {
-          return new Uint8Array(buffer);
-        });
+        return imageBytesFromUrl(url, 'image');
       }, width, height, colors, maxBytes, maxPixels, retryLevel, maxCost, forceTall, statusCb);
     },
     avatarBytes: function(chatToken, width, height, colors, maxBytes) {
@@ -908,12 +1127,7 @@ function create(options) {
         return Promise.reject(new Error('No thumbnail'));
       }
       return image.graphAvatarBytes(chatToken, function() {
-        return fetch(url).then(function(response) {
-          if (!response.ok) throw new Error('thumbnail download failed');
-          return response.arrayBuffer();
-        }).then(function(buffer) {
-          return new Uint8Array(buffer);
-        });
+        return imageBytesFromUrl(url, 'thumbnail');
       }, width, height, colors, maxBytes);
     },
     cancelImageRequests: image.cancelImageRequests

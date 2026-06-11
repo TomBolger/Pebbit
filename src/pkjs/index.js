@@ -3,15 +3,15 @@ var redditBackend = require('./reddit/backend');
 
 var DEBUG_LOGS = false;
 var MEDIA_ENABLED = true;
-var MAX_ROWS = 16;
+var MAX_ROWS = 12;
 var MAX_SEND_QUEUE = 80;
-var INITIAL_MESSAGE_ROWS = 5;
+var INITIAL_MESSAGE_ROWS = 4;
 var OLDER_MESSAGE_ROWS = 8;
-var NEWER_MESSAGE_ROWS = 5;
+var NEWER_MESSAGE_ROWS = 4;
 var MESSAGE_PAGE_FETCH_ROWS = 80;
 var PHONE_MESSAGE_CACHE_ROWS = 600;
-var MAX_MESSAGE_ROWS = 5;
-var MESSAGE_EDGE_BUFFER_ROWS = 4;
+var MAX_MESSAGE_ROWS = 4;
+var MESSAGE_EDGE_BUFFER_ROWS = 2;
 var MAX_MESSAGE_TEXT = 460;
 var MAX_CONTEXT_VIEW_TEXT = 1200;
 var MAX_REPLY_QUOTE_TEXT = 110;
@@ -128,10 +128,10 @@ function configureForPlatform() {
     info = null;
   }
   if (info && info.platform === 'emery') {
-    INITIAL_MESSAGE_ROWS = 5;
+    INITIAL_MESSAGE_ROWS = 4;
     OLDER_MESSAGE_ROWS = 8;
-    NEWER_MESSAGE_ROWS = 5;
-    MAX_MESSAGE_ROWS = 5;
+    NEWER_MESSAGE_ROWS = 4;
+    MAX_MESSAGE_ROWS = 4;
     MAX_MESSAGE_TEXT = 460;
     MAX_CONTEXT_VIEW_TEXT = 1700;
     MAX_REPLY_QUOTE_TEXT = 150;
@@ -142,10 +142,10 @@ function configureForPlatform() {
     IMAGE_MAX_PIXELS = 43000;
     IMAGE_CHUNK_SIZE = 500;
   } else if (info && info.platform === 'gabbro') {
-    INITIAL_MESSAGE_ROWS = 5;
+    INITIAL_MESSAGE_ROWS = 4;
     OLDER_MESSAGE_ROWS = 8;
-    NEWER_MESSAGE_ROWS = 5;
-    MAX_MESSAGE_ROWS = 5;
+    NEWER_MESSAGE_ROWS = 4;
+    MAX_MESSAGE_ROWS = 4;
     MAX_MESSAGE_TEXT = 460;
     MAX_CONTEXT_VIEW_TEXT = 1400;
     MAX_REPLY_QUOTE_TEXT = 125;
@@ -863,6 +863,7 @@ function sendChatRows(chats, silent) {
     sendToWatch(chatPayload(rows[index], index, rows.length));
   }
   done('chats_done', rows.length);
+  queueChatAvatars(rows);
 }
 
 function messageRowCost(message) {
@@ -930,7 +931,7 @@ function messagePayload(message, type, index, count, transferId) {
     payload[MessageKeys.Reactions] = clampText(message.reactions, 16);
   }
   if (message.meta) {
-    payload[MessageKeys.MessageMeta] = clampUtf8Bytes(message.meta, 15);
+    payload[MessageKeys.MessageMeta] = watchText(message.meta, 23);
   }
   if (message.reply_sender) {
     payload[MessageKeys.ReplySender] = clampText(message.reply_sender, 35);
@@ -960,7 +961,7 @@ function streamMessageRows(chatId, messages, mode, finalCount) {
   var isOlder = mode === 'older' || mode === 'older_silent';
   var isNewer = mode === 'newer' || mode === 'newer_silent';
   var rows = limitMessageWindow(messages || [], !isOlder && !isNewer);
-  var doneCount = finalCount === undefined ? rows.length : finalCount;
+  var doneCount = rows.length;
   var transferId = ++messageStreamSeq;
   var cursor = isNewer ? 0 : rows.length - 1;
   var modeCode = isOlder ? 1 : (isNewer ? 2 : 0);
@@ -993,7 +994,9 @@ function streamMessageRows(chatId, messages, mode, finalCount) {
 function sendMessageRows(messages, chatId, mode, finalCount) {
   mode = mode || 'initial';
   if (mode === 'initial') {
-    sendMessageWindow(chatId || currentChatId, messages, mode, false, finalCount);
+    var keepTopWindow = messages && messages.length && messages[0] &&
+      (messages[0].section === 'post' || messages[0].kind === 'post');
+    sendMessageWindow(chatId || currentChatId, messages, mode, false, finalCount, keepTopWindow);
     return;
   }
   streamMessageRows(chatId || currentChatId, messages, mode, finalCount);
@@ -1002,7 +1005,7 @@ function sendMessageRows(messages, chatId, mode, finalCount) {
 function sendMessageWindow(chatId, messages, mode, silent, finalCount, keepWindow) {
   var rows = keepWindow ? (messages || []).slice(0, MAX_MESSAGE_ROWS) :
     limitMessageWindow(messages || [], mode === 'initial');
-  var doneCount = finalCount === undefined ? rows.length : finalCount;
+  var doneCount = rows.length;
   var transferId = ++messageStreamSeq;
   var modeCode = mode === 'older' ? 1 : (mode === 'newer' ? 2 : 0);
   var start = {};
@@ -1033,9 +1036,11 @@ function messageSortValue(id) {
 }
 
 function compareMessageIds(a, b) {
-  var av = a && a.sort_ts ? Number(a.sort_ts) : 0;
-  var bv = b && b.sort_ts ? Number(b.sort_ts) : 0;
-  if (av || bv) {
+  var hasA = a && a.sort_ts !== undefined && a.sort_ts !== null;
+  var hasB = b && b.sort_ts !== undefined && b.sort_ts !== null;
+  var av = hasA ? Number(a.sort_ts) : 0;
+  var bv = hasB ? Number(b.sort_ts) : 0;
+  if (hasA || hasB) {
     return av - bv;
   }
   av = messageSortValue(a && a.id);
@@ -1221,7 +1226,9 @@ function warmChatHistory(chatId) {
 function rememberMessages(chatId, messages) {
   messages = messages || [];
   mergeHistoryMessages(chatId, messages);
-  messageStore[chatId] = limitMessageWindow(messages, true);
+  var threadDetail = messages.length && messages[0] &&
+    (messages[0].section === 'post' || messages[0].kind === 'post');
+  messageStore[chatId] = limitMessageWindow(messages, !threadDetail);
   messageStoreNewest[chatId] = true;
 }
 
@@ -2102,6 +2109,29 @@ function sendReaction(chatId, messageId, token) {
   });
 }
 
+function thingAction(chatId, messageId, action) {
+  if (typeof activeReddit().thingAction !== 'function') {
+    error('Action unavailable');
+    return;
+  }
+  timed('reddit action ' + action + ' ' + chatId, activeReddit().thingAction(chatId, messageId, action)).then(function() {
+    var payload = {};
+    payload[MessageKeys.Type] = 'chat_action_done';
+    payload[MessageKeys.ChatId] = String(chatId || '');
+    payload[MessageKeys.MessageId] = String(messageId || '');
+    payload[MessageKeys.Text] = action;
+    sendToWatch(payload);
+    if (currentChatId === chatId) {
+      refreshOpenChat();
+    } else {
+      removeChatCache(chatId);
+      scheduleUpdateRefresh(250);
+    }
+  }).catch(function(err) {
+    promiseError('Action failed', err);
+  });
+}
+
 function chatAction(kind, chatId) {
   var action = activeReddit()[kind];
   if (typeof action !== 'function') {
@@ -2477,6 +2507,13 @@ Pebble.addEventListener('appmessage', function(event) {
     editMessage(chatId, editMessageId || messageId, text);
   } else if (command === 'send_reaction') {
     sendReaction(chatId, messageId, text);
+  } else if (command === 'upvote' ||
+             command === 'downvote' ||
+             command === 'clear_vote' ||
+             command === 'save' ||
+             command === 'unsave' ||
+             command === 'toggle_save') {
+    thingAction(chatId, messageId, command);
   } else if (command === 'archive_chat') {
     chatAction('archiveChat', chatId);
   } else if (command === 'mark_unread') {

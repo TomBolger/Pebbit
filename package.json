@@ -11,9 +11,7 @@
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
-      "emery",
-      "basalt",
-      "gabbro"
+      "emery"
     ],
     "capabilities": [
       "configurable"
