@@ -302,3 +302,15 @@ Phase 5: Daily-driver polish
 - Changed phone-to-watch message transfer counts to report rows actually sent after trimming, preventing the watch from waiting for nonexistent comment rows.
 - Reduced first thread/comment packets and real comment flattening to a smaller Emery-safe window while crash testing continues.
 - Verified on the Emery emulator: feed opens, the media post row renders an actual square thumbnail, opening the media thread starts at the OP card, the OP image loads, and the emulator remains alive. Output copied to `I:\My drive\Pebbit.pbw`.
+
+2026-06-12:
+- Delegated the required Plan Execution crash follow-up: one explorer audited watch-side comment rendering/image cancellation, and one explorer audited phone-side image transfer cancellation/Reddit row shaping.
+- Fixed the likely media/comment collision by having the watch send `cancel_image` before clearing an active image request and by ignoring stale image start/done/error packets without kicking off new image work.
+- Changed phone-side image delivery from one burst of queued chunks to a paced, cancellable transfer that checks the current chat/request before each chunk.
+- Reduced Reddit detail scroll pressure: Reddit detail row changes now use immediate alignment instead of the donor chat animation loop, and the 2ms scroll timer no longer prods image loading during Reddit detail animations.
+- Made Reddit comment rows cheaper for Emery by removing visible fetched-comment quote panels, sending shorter watch-visible comment/OP text, and keeping full text available through the phone-side full-text cache.
+- Trimmed donor-era watch buffers to keep the Emery build under Pebble's app size limit: smaller transient text buffers, fewer canned reply slots, and shorter title/status buffers.
+- Reduced Emery media payload settings and increased phone-side image preparation timeout so selected media has more time to finish without flooding the watch.
+- Verified `node --check src/pkjs/index.js`, `node --check src/pkjs/reddit/backend.js`, `git diff --check`, and `pebble build`.
+- Wiped stale SDK emulator app state after install transport timeouts, then installed on the Emery emulator successfully. Text-only thread with first comment visible stayed alive; media thread scrolled from the OP/media card into the first comment and hidden-reply row without emulator OS crash.
+- Final PBW for this pass was copied to `I:\My drive\Pebbit.pbw`. Remaining observation: the mock `picsum.photos` media path timed out once in the emulator after the stability fix, so real-device media should be rechecked with Reddit-hosted images.

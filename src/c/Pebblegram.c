@@ -18,10 +18,10 @@
 
 #define MAX_CHATS 12
 #define MAX_ASSIGNEE_OPTIONS PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 3, 3, 3, 3, 5, 5, 5)
-#define MAX_MESSAGES 4
+#define MAX_MESSAGES 3
 #define MAX_BUCKET_OPTIONS 10
 #define DATE_CHOICE_COUNT 5
-#define MAX_TEXT 96
+#define MAX_TEXT 64
 #define MAX_FULL_TEXT 900
 #define MESSAGE_PREVIEW_TEXT PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 120, 120, 120, 120, 220, 220, 220)
 #define MAX_SENDER 36
@@ -47,8 +47,8 @@
 #define BW_UI PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 0, 0, 0, 1, 0, 0, 0)
 #define ROUND_UI PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 0, 0, 0, 0, 0, 0, 1)
 #define STATUS_H PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 24, 24, 24, 24, 24, 24, 22)
-#define MAX_CANNED 5
-#define CANNED_TEXT_LEN 24
+#define MAX_CANNED 3
+#define CANNED_TEXT_LEN 20
 #define PLANNER_LABEL_COUNT 6
 #define PLANNER_LABEL_TEXT_LEN 24
 #define PG_MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -385,9 +385,7 @@ static int s_loaded_image_count;
 static char s_canned[MAX_CANNED][CANNED_TEXT_LEN] = {
   "Yes",
   "No",
-  "Thanks",
-  "Good point",
-  "",
+  "Thanks"
 };
 static char *s_subreddit_labels_packed;
 static char s_pending_text[MAX_TEXT];
@@ -402,8 +400,8 @@ static bool s_touch_keyboard_shift;
 static char s_touch_keyboard_sent_text[TOUCH_KEYBOARD_MAX_TEXT];
 #endif
 static char s_current_chat_id[MAX_ID];
-static char s_current_chat_title[40];
-static char s_status_text[48];
+static char s_current_chat_title[36];
+static char s_status_text[40];
 static char s_loading_text[64] = "Loading...";
 static char s_chat_refresh_selected_id[MAX_ID];
 static char s_chat_list_selected_id[MAX_ID];
@@ -426,9 +424,9 @@ static ViewState s_view_state;
 static ListMode s_list_mode;
 static int s_selected_checklist_item;
 static char s_current_plan_id[MAX_ID];
-static char s_current_plan_title[40];
+static char s_current_plan_title[36];
 static char s_current_bucket_id[MAX_ID];
-static char s_current_bucket_title[40];
+static char s_current_bucket_title[36];
 static bool s_viewing_completed_tasks;
 static bool s_checklist_edit_mode;
 static bool s_reddit_detail_request;
@@ -1528,6 +1526,9 @@ static void clear_active_image_request(void) {
   }
   if (message) {
     message->image_requested = false;
+  }
+  if (s_image_message_id[0] && s_current_chat_id[0]) {
+    send_command_with_status("cancel_image", s_current_chat_id, NULL, NULL, s_image_message_id, false);
   }
   reset_image_transfer_state();
 }
@@ -3031,10 +3032,12 @@ static int subreddit_detail_bubble_width(GRect safe, int index) {
 }
 
 static bool message_is_thread_marker(Message *message) {
-  return message && (message->section[0] == 'm' ||
-         (message->section[0] == 'c' &&
-          (message->section[2] == 'n' || message->section[2] == 'l')));
+  return message && (strcmp(message->section, "more") == 0 ||
+                     strcmp(message->section, "collapsed") == 0);
 }
+
+#define draw_text_safe(ctx, text, font, rect, overflow, alignment) \
+  graphics_draw_text(ctx, text, font, rect, overflow, alignment, NULL)
 
 static int subreddit_post_height(Message *message, int text_w) {
   int header_h = message->sender[0] ? 18 : 0;
@@ -3051,13 +3054,16 @@ static int subreddit_post_height(Message *message, int text_w) {
     image_h = message_image_display_height(message, PG_MIN(IMAGE_THUMB_SIZE + IMAGE_FRAME_EXTRA_W, text_w)) + 8;
   }
 #endif
-  GSize size = graphics_text_layout_get_content_size(
-    message->text,
-    fonts_get_system_font(FONT_KEY_GOTHIC_18),
-    GRect(0, 0, text_w, 2000),
-    GTextOverflowModeWordWrap,
-    GTextAlignmentLeft
-  );
+  GSize size = GSize(0, 0);
+  if (message->text[0] && text_w > 4) {
+    size = graphics_text_layout_get_content_size(
+      message->text,
+      fonts_get_system_font(FONT_KEY_GOTHIC_18),
+      GRect(0, 0, text_w, 2000),
+      GTextOverflowModeWordWrap,
+      GTextAlignmentLeft
+    );
+  }
   return PG_MAX(40, header_h + PG_MIN(size.h, MAX_TEXT * 2) + image_h + meta_h + 10);
 }
 
@@ -3203,7 +3209,9 @@ static void chat_scroll_timer_callback(void *data) {
   if (s_messages_root) {
     layer_mark_dirty(s_messages_root);
   }
-  request_next_image();
+  if (!subreddit_detail_active()) {
+    request_next_image();
+  }
 }
 
 static void set_chat_scroll_offset_quiet(int target) {
@@ -3246,6 +3254,9 @@ static void set_chat_scroll_offset(int target, bool animated) {
 static void select_message_with_alignment(int index, bool align_top, bool animated) {
   if (!s_messages_root || index < 0 || index >= s_message_count) {
     return;
+  }
+  if (subreddit_detail_active()) {
+    animated = false;
   }
 
   s_selected_message = index;
@@ -3592,7 +3603,6 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
                        GTextAlignmentCenter, NULL);
   }
 
-  recalc_message_layout();
   GFont text_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
   GFont sender_font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
   GFont reaction_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
@@ -3629,15 +3639,18 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
     if (y > bounds.size.h) {
       break;
     }
+    if (y + bubble_h < 0) {
+      continue;
+    }
 
     message_preview_text(message, display_text, sizeof(display_text));
 
     if (subreddit && message_is_thread_marker(message)) {
       graphics_context_set_text_color(ctx, BW_UI ? GColorBlack : GColorDarkGray);
-      graphics_draw_text(ctx, display_text,
-                         fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
-                         GRect(x + 4, y + 1, bubble_w - 8, bubble_h),
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+      draw_text_safe(ctx, display_text,
+                     fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                     GRect(x + 4, y + 1, bubble_w - 8, bubble_h),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter);
       continue;
     }
 
@@ -3689,8 +3702,9 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
       graphics_context_set_text_color(ctx, BW_UI ? GColorBlack :
                                       (subreddit ? (top_post ? APP_COLOR : PLANNER_ITEM_NAME_COLOR) :
                                        CHAT_SENDER_COLOR));
-      graphics_draw_text(ctx, message->sender, sender_font, GRect(content_x + 5, text_y, content_text_w, name_h),
-                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+      draw_text_safe(ctx, message->sender, sender_font,
+                     GRect(content_x + 5, text_y, content_text_w, name_h),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
       text_y += name_h;
     }
     if (subreddit && message_is_checklist(message)) {
@@ -3730,9 +3744,9 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
                                GPoint(box.origin.x + 10, box.origin.y + 3));
           }
           graphics_context_set_text_color(ctx, GColorBlack);
-          graphics_draw_text(ctx, label, fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                             GRect(row.origin.x + 20, row.origin.y - 1, row.size.w - 22, row.size.h + 2),
-                             GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+          draw_text_safe(ctx, label, fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                         GRect(row.origin.x + 20, row.origin.y - 1, row.size.w - 22, row.size.h + 2),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
         }
         GRect add_row = GRect(content_x + 4, text_y + (items * 22), content_text_w + 2, 21);
         bool add_selected = selected && s_selected_checklist_item == items;
@@ -3747,10 +3761,10 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
                                                 add_row.size.w - 2, add_row.size.h - 2), 2);
           }
           graphics_context_set_text_color(ctx, add_selected ? GColorWhite : GColorBlack);
-          graphics_draw_text(ctx, "+ Add an item", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                             GRect(add_row.origin.x + 4, add_row.origin.y - 1,
-                                   add_row.size.w - 8, add_row.size.h + 2),
-                             GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+          draw_text_safe(ctx, "+ Add an item", fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                         GRect(add_row.origin.x + 4, add_row.origin.y - 1,
+                               add_row.size.w - 8, add_row.size.h + 2),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
         }
       continue;
     }
@@ -3766,9 +3780,9 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
 #endif
     int text_rect_h = bubble_h - name_h - context_h - image_h - reaction_h - 6;
     if (display_text[0] && text_rect_h > 0 && content_text_w > 4) {
-      graphics_draw_text(ctx, display_text, text_font,
-                         GRect(content_x + 5, text_y, content_text_w, text_rect_h),
-                         GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
+      draw_text_safe(ctx, display_text, text_font,
+                     GRect(content_x + 5, text_y, content_text_w, text_rect_h),
+                     GTextOverflowModeWordWrap, GTextAlignmentLeft);
     }
 
 #if MEDIA_ENABLED
@@ -3779,9 +3793,13 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
       GRect image_rect = GRect(content_x + 5,
                               y + bubble_h - reaction_h - image_h - 4,
                               image_w, image_h);
-      if (message->image_bitmap) {
+      bool image_visible = image_rect.size.w > 0 && image_rect.size.h > 0 &&
+                           image_rect.origin.y >= 0 &&
+                           image_rect.origin.y < bounds.size.h &&
+                           image_rect.origin.y + image_rect.size.h > 0;
+      if (image_visible && message->image_bitmap) {
         graphics_draw_bitmap_in_rect(ctx, message->image_bitmap, image_rect);
-      } else {
+      } else if (image_visible) {
 		        bool gif = message_is_gif(message);
 		        const char *media_name = gif ? "GIF" : "Photo";
 		        const char *label = message->image_failed ?
@@ -3796,10 +3814,10 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
 		        int requested_h = loading_detail[0] && image_rect.size.h >= 64 ? 58 : 42;
 		        int label_h = message->image_failed ? PG_MIN(image_rect.size.h - 4, 46) : 24;
 		        int label_y = image_rect.origin.y + PG_MAX(2, (image_rect.size.h - (message->image_requested ? requested_h : label_h)) / 2);
-		        graphics_draw_text(ctx, label, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-		                           GRect(image_rect.origin.x + 4, label_y, image_rect.size.w - 8, label_h),
-		                           message->image_failed ? GTextOverflowModeWordWrap : GTextOverflowModeTrailingEllipsis,
-		                           GTextAlignmentCenter, NULL);
+		        draw_text_safe(ctx, label, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+		                       GRect(image_rect.origin.x + 4, label_y, image_rect.size.w - 8, label_h),
+		                       message->image_failed ? GTextOverflowModeWordWrap : GTextOverflowModeTrailingEllipsis,
+		                       GTextAlignmentCenter);
 	        if (message->image_requested && image_rect.size.h >= 48) {
 	          int bar_w = PG_MIN(image_rect.size.w - 20, 112);
 	          GRect bar = GRect(image_rect.origin.x + ((image_rect.size.w - bar_w) / 2),
@@ -3807,9 +3825,9 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
 	          draw_loading_bar(ctx, bar, image_percent);
 	          if (loading_detail[0] && image_rect.size.h >= 64) {
 	            graphics_context_set_text_color(ctx, GColorDarkGray);
-	            graphics_draw_text(ctx, loading_detail, fonts_get_system_font(FONT_KEY_GOTHIC_14),
-	                               GRect(image_rect.origin.x + 4, label_y + 40, image_rect.size.w - 8, 18),
-	                               GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+	            draw_text_safe(ctx, loading_detail, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+	                           GRect(image_rect.origin.x + 4, label_y + 40, image_rect.size.w - 8, 18),
+	                           GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter);
 	          }
 	        }
 	      }
@@ -3821,22 +3839,22 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
       graphics_context_set_text_color(ctx, BW_UI ? GColorBlack : GColorDarkGray);
       if (subreddit) {
         if (message->meta[0]) {
-          graphics_draw_text(ctx, message->meta, reaction_font,
-                             GRect(content_x + 7, y + bubble_h - reaction_h - 1,
-                                   PG_MAX(1, content_text_w - (message->reactions[0] ? 40 : 0)), reaction_h),
-                             GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+          draw_text_safe(ctx, message->meta, reaction_font,
+                         GRect(content_x + 7, y + bubble_h - reaction_h - 1,
+                               PG_MAX(1, content_text_w - (message->reactions[0] ? 40 : 0)), reaction_h),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
         }
         if (message->reactions[0]) {
-          graphics_draw_text(ctx, message->reactions, reaction_font,
-                             GRect(content_x + content_text_w - 34, y + bubble_h - reaction_h - 1,
-                                   34, reaction_h),
-                             GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+          draw_text_safe(ctx, message->reactions, reaction_font,
+                         GRect(content_x + content_text_w - 34, y + bubble_h - reaction_h - 1,
+                               34, reaction_h),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight);
         }
       } else if (message->reactions[0]) {
-        graphics_draw_text(ctx, message->reactions, reaction_font,
-                           GRect(x + 7, y + bubble_h - reaction_h - 1,
-                                 text_w - meta_w - 6, reaction_h),
-                           GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+        draw_text_safe(ctx, message->reactions, reaction_font,
+                       GRect(x + 7, y + bubble_h - reaction_h - 1,
+                             text_w - meta_w - 6, reaction_h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
       }
       if (!subreddit && message->meta[0]) {
         draw_message_meta(ctx, message->meta, reaction_font,
@@ -4558,6 +4576,13 @@ static void request_next_image(void) {
     return;
   }
   refresh_loaded_image_count();
+  if (subreddit_detail_active() && !selected_message_needs_image()) {
+    if (s_image_message_id[0]) {
+      clear_active_image_request();
+    }
+    refresh_loaded_image_count();
+    return;
+  }
 
   if (s_image_message_id[0]) {
     Message *active_message = find_message_by_image_token(s_image_message_id);
@@ -4579,6 +4604,9 @@ static void request_next_image(void) {
   }
 
   int image_index = selected_message_needs_image() ? s_selected_message : -1;
+  if (subreddit_detail_active() && image_index < 0) {
+    return;
+  }
   if (image_index < 0) {
     image_index = find_best_image_candidate(true, true);
   }
@@ -6334,7 +6362,6 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
                image_format && image_format[0] ? image_format : "png",
                image_diag_heap_free());
     if (!message || !is_active_image) {
-      request_next_image();
       return;
     }
     int image_index = message_index_from_ptr(message);
@@ -6561,7 +6588,7 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
       }
       reset_image_transfer_state();
     }
-    if (!retrying_image) {
+    if (is_active_image && !retrying_image) {
       request_next_image();
     }
     return;
@@ -6598,7 +6625,9 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
     if (s_messages_root) {
       layer_mark_dirty(s_messages_root);
     }
-    request_next_image();
+    if (is_active_image) {
+      request_next_image();
+    }
     return;
   }
 #endif

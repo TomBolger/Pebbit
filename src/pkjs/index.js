@@ -5,14 +5,14 @@ var DEBUG_LOGS = false;
 var MEDIA_ENABLED = true;
 var MAX_ROWS = 12;
 var MAX_SEND_QUEUE = 80;
-var INITIAL_MESSAGE_ROWS = 4;
+var INITIAL_MESSAGE_ROWS = 3;
 var OLDER_MESSAGE_ROWS = 8;
-var NEWER_MESSAGE_ROWS = 4;
+var NEWER_MESSAGE_ROWS = 3;
 var MESSAGE_PAGE_FETCH_ROWS = 80;
 var PHONE_MESSAGE_CACHE_ROWS = 600;
-var MAX_MESSAGE_ROWS = 4;
+var MAX_MESSAGE_ROWS = 3;
 var MESSAGE_EDGE_BUFFER_ROWS = 2;
-var MAX_MESSAGE_TEXT = 460;
+var MAX_MESSAGE_TEXT = 180;
 var MAX_CONTEXT_VIEW_TEXT = 1200;
 var MAX_REPLY_QUOTE_TEXT = 110;
 var MESSAGE_WINDOW_BUDGET = 5400;
@@ -22,6 +22,7 @@ var IMAGE_COLORS = 64;
 var IMAGE_MAX_BYTES = 10000;
 var IMAGE_MAX_PIXELS = 36000;
 var IMAGE_CHUNK_SIZE = 500;
+var IMAGE_CHUNK_INTERVAL_MS = 20;
 var AVATAR_SIZE = 28;
 var AVATAR_COLORS = 16;
 var AVATAR_MAX_BYTES = 5000;
@@ -64,7 +65,7 @@ var postFirstPaintStarted = false;
 var postFirstPaintTimer = null;
 var deferredStartupChats = null;
 var launchStartedAt = Date.now();
-var IMAGE_PREPARE_TIMEOUT_MS = 25000;
+var IMAGE_PREPARE_TIMEOUT_MS = 45000;
 var MESSAGE_FETCH_TIMEOUT_MS = 25000;
 
 function getSetting(name, fallback) {
@@ -128,25 +129,25 @@ function configureForPlatform() {
     info = null;
   }
   if (info && info.platform === 'emery') {
-    INITIAL_MESSAGE_ROWS = 4;
+    INITIAL_MESSAGE_ROWS = 3;
     OLDER_MESSAGE_ROWS = 8;
-    NEWER_MESSAGE_ROWS = 4;
-    MAX_MESSAGE_ROWS = 4;
-    MAX_MESSAGE_TEXT = 460;
+    NEWER_MESSAGE_ROWS = 3;
+    MAX_MESSAGE_ROWS = 3;
+    MAX_MESSAGE_TEXT = 180;
     MAX_CONTEXT_VIEW_TEXT = 1700;
-    MAX_REPLY_QUOTE_TEXT = 150;
-    MESSAGE_WINDOW_BUDGET = 5400;
-    IMAGE_SIZE = 176;
-    IMAGE_WIDTH = 176;
-    IMAGE_MAX_BYTES = 30000;
-    IMAGE_MAX_PIXELS = 43000;
+    MAX_REPLY_QUOTE_TEXT = 90;
+    MESSAGE_WINDOW_BUDGET = 2600;
+    IMAGE_SIZE = 156;
+    IMAGE_WIDTH = 156;
+    IMAGE_MAX_BYTES = 22000;
+    IMAGE_MAX_PIXELS = 32000;
     IMAGE_CHUNK_SIZE = 500;
   } else if (info && info.platform === 'gabbro') {
-    INITIAL_MESSAGE_ROWS = 4;
+    INITIAL_MESSAGE_ROWS = 3;
     OLDER_MESSAGE_ROWS = 8;
-    NEWER_MESSAGE_ROWS = 4;
-    MAX_MESSAGE_ROWS = 4;
-    MAX_MESSAGE_TEXT = 460;
+    NEWER_MESSAGE_ROWS = 3;
+    MAX_MESSAGE_ROWS = 3;
+    MAX_MESSAGE_TEXT = 180;
     MAX_CONTEXT_VIEW_TEXT = 1400;
     MAX_REPLY_QUOTE_TEXT = 125;
     MESSAGE_WINDOW_BUDGET = 5400;
@@ -281,6 +282,9 @@ function trimSendQueueFor(payload) {
 }
 
 function sendToWatch(payload) {
+  if (isObsoleteQueuedPayload({payload: payload})) {
+    return;
+  }
   if (!trimSendQueueFor(payload)) {
     return;
   }
@@ -691,7 +695,14 @@ function normalizeWatchString(value) {
     .replace(/[\u200b-\u200f\ufe00-\ufe0f\ufeff]/g, '')
     .replace(/[\ud800-\udbff][\udc00-\udfff]/g, function(match) {
       return WATCH_SUPPORTED_EMOJI_MAP[match] ? match : ':emoji:';
-    });
+    })
+    .replace(/[\u2018\u2019\u201a\u201b]/g, "'")
+    .replace(/[\u201c\u201d\u201e\u201f]/g, '"')
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/\u2191/g, 'up ')
+    .replace(/\u2193/g, 'down ')
+    .replace(/[^\x20-\x7e]/g, ' ');
 }
 
 function clampText(value, maxLength) {
@@ -2202,7 +2213,7 @@ function sendImage(chatId, messageId, requestText) {
       logDuration('image prepare ' + messageId, startedAt);
     }
     sendImageStatus(messageId, 'Sending');
-    sendImageBytes(messageId, bytes);
+    sendImageBytes(chatId, messageId, bytes, requestSeq);
   }).catch(function(err) {
     if (requestSeq !== imageRequestSeq || currentChatId !== chatId) {
       return;
@@ -2265,13 +2276,23 @@ function pbiDimensions(bytes) {
   };
 }
 
-function sendImageBytes(messageId, bytes) {
+function imageTransferStillCurrent(chatId, requestSeq, transferId) {
+  return requestSeq === imageRequestSeq &&
+    currentChatId === chatId &&
+    (!transferId || transferId > cancelledImageTransferSeq);
+}
+
+function sendImageBytes(chatId, messageId, bytes, requestSeq) {
   var start = {};
   var dimensions = pngDimensions(bytes);
   var isPbi = false;
   if (!dimensions) {
     dimensions = pbiDimensions(bytes);
     isPbi = !!dimensions;
+  }
+  if (!imageTransferStillCurrent(chatId, requestSeq, 0)) {
+    imageTransferActive = false;
+    return;
   }
   var transferId = ++imageTransferSeq;
   imageTransferActive = true;
@@ -2288,8 +2309,25 @@ function sendImageBytes(messageId, bytes) {
   }
   sendToWatch(start);
 
-  // PNGs are chunked through AppMessage and reassembled by the C app.
-  for (var offset = 0; offset < bytes.length; offset += IMAGE_CHUNK_SIZE) {
+  function stopIfCancelled() {
+    if (imageTransferSeq === transferId) {
+      imageTransferActive = false;
+    }
+  }
+
+  function sendChunk(offset) {
+    if (!imageTransferStillCurrent(chatId, requestSeq, transferId)) {
+      stopIfCancelled();
+      return;
+    }
+    if (offset >= bytes.length) {
+      var donePayload = {};
+      donePayload[MessageKeys.Type] = 'image_done';
+      donePayload[MessageKeys.MessageId] = String(messageId || '');
+      donePayload[MessageKeys.ImageTransferId] = transferId;
+      sendToWatch(donePayload);
+      return;
+    }
     var chunk = {};
     var slice = bytes.subarray(offset, Math.min(offset + IMAGE_CHUNK_SIZE, bytes.length));
     var data = [];
@@ -2302,13 +2340,12 @@ function sendImageBytes(messageId, bytes) {
     chunk[MessageKeys.ImageData] = data;
     chunk[MessageKeys.ImageTransferId] = transferId;
     sendToWatch(chunk);
+    setTimeout(function() {
+      sendChunk(offset + IMAGE_CHUNK_SIZE);
+    }, IMAGE_CHUNK_INTERVAL_MS);
   }
 
-  var donePayload = {};
-  donePayload[MessageKeys.Type] = 'image_done';
-  donePayload[MessageKeys.MessageId] = String(messageId || '');
-  donePayload[MessageKeys.ImageTransferId] = transferId;
-  sendToWatch(donePayload);
+  sendChunk(0);
 }
 
 function sendAvatar(chatId, bytes) {

@@ -11,7 +11,7 @@ var DEFAULT_SUBREDDITS = 'pebble|pebblewatch|programming|technology|AskReddit';
 var USER_AGENT = 'Pebbit/0.1 personal PebbleOS client by u/tombolger';
 var MAX_CACHE_MS = 5 * 60 * 1000;
 var MAX_VISIBLE_REPLIES_PER_COMMENT = 3;
-var MAX_COMMENT_ROWS = 16;
+var MAX_COMMENT_ROWS = 10;
 var MAX_LISTING_ROWS = 12;
 
 var tokenMaps = {
@@ -120,6 +120,15 @@ function plainText(value) {
     .trim());
 }
 
+function watchBubbleText(value, maxChars) {
+  var text = plainText(value).replace(/\s+/g, ' ').trim();
+  maxChars = maxChars || 120;
+  if (text.length <= maxChars) {
+    return text;
+  }
+  return text.substring(0, Math.max(0, maxChars - 4)).replace(/\s+\S*$/, '') + ' ...';
+}
+
 function compactNumber(value) {
   var n = Number(value || 0);
   if (Math.abs(n) >= 1000000) {
@@ -146,12 +155,12 @@ function scoreParts(thing) {
     ups = score;
   }
   if (ups) {
-    parts.push('\u2191' + compactNumber(ups));
+    parts.push('up ' + compactNumber(ups));
   } else if (score) {
-    parts.push((score < 0 ? '\u2193' : '\u2191') + compactNumber(Math.abs(score)));
+    parts.push((score < 0 ? 'down ' : 'up ') + compactNumber(Math.abs(score)));
   }
   if (downs) {
-    parts.push('\u2193' + compactNumber(downs));
+    parts.push('down ' + compactNumber(downs));
   }
   return parts;
 }
@@ -168,13 +177,13 @@ function awardText(thing) {
   if (!total) {
     return '';
   }
-  return '\ud83c\udfc5' + compactNumber(total);
+  return '*' + compactNumber(total);
 }
 
 function postMeta(post) {
   var parts = scoreParts(post);
   if (post && post.num_comments !== undefined) {
-    parts.push('\ud83d\udcac' + compactNumber(post.num_comments || 0));
+    parts.push(compactNumber(post.num_comments || 0) + 'c');
   }
   parts.push(ageText(post && post.created_utc));
   if (post && post.saved) {
@@ -579,25 +588,27 @@ function normalizeComment(data, parentById) {
   var comment = data && data.data ? data.data : data;
   var id = comment.name || comment.id || '';
   var token = tokenFor(comment.kind === 'more' || id.indexOf('more_') === 0 ? 'comment' : 'comment', id);
-  var parent = parentById && parentById[comment.parent_id];
-  var quoteTime = parentById && parentById.__recentReplyQuotes && parentById.__recentReplyQuotes[comment.parent_id];
+  var depth = parseInt(comment.depth || 0, 10);
+  if (!isFinite(depth) || depth < 0) {
+    depth = 0;
+  }
+  depth = Math.min(9, depth);
   var text = comment.kind === 'more' ? 'Load more comments' :
     plainText(comment.body || comment.body_html || '[deleted]');
+  var visibleText = comment.kind === 'more' || comment.kind === 'summary' ?
+    watchBubbleText(text, 42) :
+    watchBubbleText(text, 116);
   var meta = comment.kind === 'summary' ? '' : commentMeta(comment);
   var row = {
     id: token,
     sender: comment.kind === 'more' || comment.kind === 'summary' ? 'More' : ('u/' + (comment.author || '[deleted]')),
-    text: text,
+    text: visibleText,
     meta: meta,
     reactions: comment.kind === 'summary' ? '' : awardText(comment),
     outgoing: !!comment.outgoing,
     section: comment.kind === 'summary' ? 'collapsed' :
-      (comment.kind === 'more' ? 'more' : ('d' + Math.min(9, Number(comment.depth || 0))))
+      (comment.kind === 'more' ? 'more' : ('d' + depth))
   };
-  if ((comment.quote_parent || (quoteTime && Number(comment.created_utc || 0) >= quoteTime - 120)) && parent) {
-    row.reply_sender = parent.title ? ('r/' + (parent.subreddit || 'reddit')) : ('u/' + (parent.author || 'parent'));
-    row.reply_text = plainText(parent.body || parent.title || '');
-  }
   savedByToken[token] = !!comment.saved;
   fullTextById[token] = text;
   return row;
@@ -754,10 +765,11 @@ function postMessage(postToken) {
   if (!text && post.url) {
     text = post.url;
   }
+  fullTextById[postToken] = text || '[link post]';
   return {
     id: postToken,
     sender: 'r/' + (post.subreddit || 'reddit'),
-    text: text || '[link post]',
+    text: watchBubbleText(text || '[link post]', tokenMaps.url[postToken] ? 110 : 140),
     meta: postMeta(post),
     reactions: awardText(post),
     outgoing: false,
