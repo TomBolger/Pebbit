@@ -96,9 +96,9 @@ Feed views use the chat list:
 - Long press opens post actions.
 
 Subreddit browser uses Planner card styling:
-- Cards for configured subreddits.
+- Cards for pinned subreddits.
 - Subreddit rows can show display name, subscribers/active count if fetched, and a pinned/hidden marker.
-- Clay settings controls which subreddits are visible.
+- Clay settings controls which subreddits are pinned or hidden.
 
 Post detail uses chat bubble/comment code:
 - First bubble is the post body/media summary.
@@ -258,7 +258,7 @@ Phase 5: Daily-driver polish
 - Added `src/pkjs/reddit/backend.js` with mock Reddit listings/comments, OAuth settings/token exchange scaffolding, Reddit listing/comment normalization, vote/save/reply/edit actions, selected-media loading, and explicit rejection for post creation.
 - Updated top-level navigation to Front Page, Hot, Trending, Saved, and Subreddits. Feed rows use the chat-list surface; subreddit/sort/post browsing uses the reused card-list surface.
 - Updated post opening to load Reddit-shaped post/comment bubbles. Select and long press in comment detail now route to normal comment actions instead of Planner field editing.
-- Added Pebbit Reddit settings coverage in both the backend inline settings page and `src/pkjs/config.html`: client ID, redirect URI/code, default feed, comment sort, visible/hidden subreddits, media mode, canned replies, NSFW, mock mode, and scopes.
+- Added Pebbit Reddit settings coverage in both the backend inline settings page and `src/pkjs/config.html`: client ID, redirect URI/code, default feed, comment sort, pinned/hidden subreddits, media mode, canned replies, NSFW, mock mode, and scopes.
 - Removed visible create-post affordances from active watch paths; stale `create_task` backend compatibility paths remain only as fail-closed rejects.
 - Verified `src/pkjs/index.js` and `src/pkjs/reddit/backend.js` with Node syntax checks.
 - Ran `pebble build` successfully. Output: `build/Pebbit.pbw`. Build warnings observed: existing Waf lock warning, linker RWX segment warnings, and minifier warnings from bundled JS/image code.
@@ -314,3 +314,71 @@ Phase 5: Daily-driver polish
 - Verified `node --check src/pkjs/index.js`, `node --check src/pkjs/reddit/backend.js`, `git diff --check`, and `pebble build`.
 - Wiped stale SDK emulator app state after install transport timeouts, then installed on the Emery emulator successfully. Text-only thread with first comment visible stayed alive; media thread scrolled from the OP/media card into the first comment and hidden-reply row without emulator OS crash.
 - Final PBW for this pass was copied to `I:\My drive\Pebbit.pbw`. Remaining observation: the mock `picsum.photos` media path timed out once in the emulator after the stability fix, so real-device media should be rechecked with Reddit-hosted images.
+
+2026-06-12 follow-up bug batch:
+- [done] Fix opened-thread media sizing so Reddit media uses the full watch/card width, does not tile, stays loaded while still visible, and uses Pebblegram-style tall-photo safety to avoid high-resolution crashes.
+- [done] Prevent double image loads/retry loops by having the phone choose a safe image size before sending instead of relying on watch-side resize retries.
+- [done] Load at least five comments under the OP card and add bottom-scroll loading for more cached comments.
+- [done] Shape comment threads like the June 11 My Drive screenshot: shallow indents, vertical rails, top-level/second-level readability, and collapsed deeper reply stacks with “view more” rows.
+- [done] Show `Unsave` in post/comment action menus when the selected Reddit thing is already saved.
+- [done] Move comment timestamps to the right side of the bottom metadata row and show awards separately; use U+1F44D for upvotes and U+1F389 for awards where the watch/font supports them.
+- [done] Verified with JS syntax checks, `git diff --check`, and an Emery `pebble build`; output copied to `I:\My drive\Pebbit.pbw`. Explicit PBW install to the Emery emulator succeeded, but the follow-up screenshot/ping transport disconnected after install.
+- [future] UI consistency overhaul: front page, subreddit views, and menus currently mix Pebblegram chat/list patterns with Planner card patterns and should be unified in a later design pass.
+
+2026-06-12 deterministic media/text follow-up:
+- [done] Removed watch-driven image resize negotiation. The watch now requests one fixed platform-safe image budget and failed media no longer re-enters a smaller retry loop.
+- [done] Changed phone media generation to use one Emery-safe message-image target (`176x352`, `18000` bytes, `36000` pixels) and compact PBI output for post media before any chunks are sent.
+- [done] Shrank unloaded media placeholders to loading-bar height until `image_start` reports the actual safe incoming dimensions, then relayouts the media card to match the incoming image.
+- [done] Increased watch comment text capacity and Reddit preview text so normal rows carry substantially more body text before needing Full Message.
+- [done] Fixed Full Message to load from the Reddit backend full-text cache instead of the already-truncated watch row, and unload the rest of the thread while the long scrolling text view is open.
+- [done] Made collapsed/thread marker rows expose a single `Load More` action instead of comment actions.
+- [done] Made Reddit Reply launch dictation directly instead of opening a Reply submenu with canned responses.
+- [done] Verified with JS syntax checks, `git diff --check`, Emery `pebble build`, PBW copy to `I:\My drive\Pebbit.pbw`, and explicit Emery emulator install of `build/Pebbit.pbw`.
+
+2026-06-12 regression repair:
+- [done] Restored Pebblegram's hardened media retry/PBI safety branches after the deterministic media pass caused routine `Photo too large` failures.
+- [done] Bumped the media cache version so stale oversized encodes are not reused after the image pipeline fix.
+- [done] Restored `View Full Message` for Reddit detail rows and kept it backed by the full-text cache instead of the truncated watch row.
+- [done] Fixed Reddit detail bottom scrolling so reaching the bottom requests the next cached comment window instead of doing nothing.
+- [done] Fixed Reddit detail top scrolling after paging down so reaching the top requests the previous cached comment window instead of trapping the reader in newer comments.
+- [done] Made `View More` selectable directly and wired it to expand the selected reply branch, including Reddit `/api/morechildren` markers when only child IDs are available.
+- [done] Removed the old watch-side canned reply parser/menu entry so Reddit replies stay direct-to-dictation and the Emery app image remains under Pebble's size limit.
+- [done] Verified with JS syntax checks, `git diff --check`, Emery `pebble build`, and PBW copy to `I:\My drive\Pebbit.pbw`.
+
+2026-06-13 media/full-text/UI repair:
+- [done] Delegated image/emoji comparison against Pebblegram and duplicate-UI mapping per Plan Execution.
+- [done] Restored Pebblegram's PNG decode fallback after freeing other images so borderline images are not mislabeled `Photo too large`.
+- [done] Fixed wide-image tiling by using the decoded bitmap aspect height for loaded media instead of forcing a 4:3 minimum rectangle.
+- [done] Changed Reddit preview/gallery selection to choose the smallest watch-appropriate preview instead of the largest available source, and switched Imgur page thumbnails to medium thumbnails.
+- [done] Fixed Full Message back navigation so it restores the unloaded thread window instead of returning to `No messages loaded`.
+- [done] Replaced generic unsupported emoji text with known shortcode names such as `:eggplant:` and `:clown:`, falling back to `:emoji:` only for unknown emoji.
+- [done] Removed the visible Planner-style Subreddits ladder from active navigation; configured subreddits now appear as normal front-page-style feed rows and open through the same post-list UI.
+- [todo] Pebblegram handoff: port the unsupported emoji shortcode map from Pebbit's `src/pkjs/index.js` into Pebblegram's matching normalization functions; Pebblegram still uses generic `:emoji:` today.
+- [done] Verified with JS syntax checks, `git diff --check`, Emery `pebble build`, and PBW copy to `I:\My drive\Pebbit.pbw`.
+
+2026-06-13 publishing/navigation pass:
+- [done] Delegated publishing/submenu review per Plan Execution.
+- [done] Put pinned subreddits back behind a top-level `Subreddits` submenu while keeping subreddit post lists on the same front-page card UI.
+- [done] Added a top-level `Subscriptions` submenu backed by Reddit's subscribed-subreddits API, filtered by the existing hidden-subreddits setting.
+- [done] Updated Reddit settings copy so public users are directed to enter their own Reddit installed-app client ID/API key, use the exact redirect URI, and avoid client secrets.
+- [done] Added a configurable User-Agent advanced setting and removed the Tom-specific default User-Agent from the backend.
+- [done] Verified settings/navigation changes with JS syntax checks, `git diff --check`, an Emery build, and an Emery emulator install; output copied to `I:\My drive\Pebbit.pbw`.
+
+2026-06-13 subscriptions/pinned wording fix:
+- [done] Delegated subscription fallback review per Plan Execution.
+- [done] Renamed the settings-managed subreddit list from `Visible subreddits` to `Pinned subreddits` in both settings pages and docs.
+- [done] Changed the Subscriptions submenu so it no longer falls back to pinned subreddit rows when mock mode is enabled; it now uses the saved Reddit OAuth token path and fails clearly if sign-in is missing.
+- [done] Verified with JS syntax checks, `git diff --check`, Emery build, and emulator install; output copied to `I:\My drive\Pebbit.pbw`.
+
+2026-06-14 Emery size rescue:
+- [done] Delegated a read-only native size review per Plan Execution.
+- [done] Preserved the short pinned/subscription menu IDs while trimming watch-side legacy submenu comparisons and unused `Pin Community` action text.
+- [done] Shortened a few native status strings to bring the Emery image back under Pebble's 16-bit virtual-size limit.
+- [done] Verified with an Emery `pebble build`; output copied to `I:\My drive\Pebbit.pbw`.
+
+2026-06-15 image tone/release pass:
+- [done] Delegated a Pebblegram image-pipeline comparison per Plan Execution.
+- [done] Ported Pebblegram's adaptive dark/light image tone mapping into Pebbit's Reddit image encoder.
+- [done] Bumped the Reddit image cache version so washed-out cached media is regenerated.
+- [done] Bumped the app package metadata to 0.2.0 for the release build.
+- [done] Verified with JS syntax checks, `git diff --check`, and an Emery `pebble build`; output copied to `I:\My drive\Pebbit.pbw`.

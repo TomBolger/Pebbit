@@ -5,12 +5,12 @@ var DEBUG_LOGS = false;
 var MEDIA_ENABLED = true;
 var MAX_ROWS = 12;
 var MAX_SEND_QUEUE = 80;
-var INITIAL_MESSAGE_ROWS = 3;
+var INITIAL_MESSAGE_ROWS = 6;
 var OLDER_MESSAGE_ROWS = 8;
-var NEWER_MESSAGE_ROWS = 3;
+var NEWER_MESSAGE_ROWS = 6;
 var MESSAGE_PAGE_FETCH_ROWS = 80;
 var PHONE_MESSAGE_CACHE_ROWS = 600;
-var MAX_MESSAGE_ROWS = 3;
+var MAX_MESSAGE_ROWS = 6;
 var MESSAGE_EDGE_BUFFER_ROWS = 2;
 var MAX_MESSAGE_TEXT = 180;
 var MAX_CONTEXT_VIEW_TEXT = 1200;
@@ -129,18 +129,18 @@ function configureForPlatform() {
     info = null;
   }
   if (info && info.platform === 'emery') {
-    INITIAL_MESSAGE_ROWS = 3;
+    INITIAL_MESSAGE_ROWS = 6;
     OLDER_MESSAGE_ROWS = 8;
-    NEWER_MESSAGE_ROWS = 3;
-    MAX_MESSAGE_ROWS = 3;
+    NEWER_MESSAGE_ROWS = 6;
+    MAX_MESSAGE_ROWS = 6;
     MAX_MESSAGE_TEXT = 180;
     MAX_CONTEXT_VIEW_TEXT = 1700;
     MAX_REPLY_QUOTE_TEXT = 90;
-    MESSAGE_WINDOW_BUDGET = 2600;
-    IMAGE_SIZE = 156;
-    IMAGE_WIDTH = 156;
-    IMAGE_MAX_BYTES = 22000;
-    IMAGE_MAX_PIXELS = 32000;
+    MESSAGE_WINDOW_BUDGET = 5200;
+    IMAGE_SIZE = 352;
+    IMAGE_WIDTH = 176;
+    IMAGE_MAX_BYTES = 30000;
+    IMAGE_MAX_PIXELS = 43000;
     IMAGE_CHUNK_SIZE = 500;
   } else if (info && info.platform === 'gabbro') {
     INITIAL_MESSAGE_ROWS = 3;
@@ -658,6 +658,35 @@ for (var watchEmojiIndex = 0; watchEmojiIndex < WATCH_SUPPORTED_EMOJI.length; wa
   WATCH_SUPPORTED_EMOJI_MAP[WATCH_SUPPORTED_EMOJI[watchEmojiIndex]] = true;
 }
 
+var UNSUPPORTED_EMOJI_NAMES = {
+  '\ud83c\udf46': 'eggplant',
+  '\ud83e\udd21': 'clown',
+  '\ud83e\udd21\ufe0f': 'clown',
+  '\ud83d\ude80': 'rocket',
+  '\ud83d\udea8': 'rotating_light',
+  '\ud83d\udd25': 'fire',
+  '\ud83d\udc4c': 'ok_hand',
+  '\ud83d\ude4c': 'raised_hands',
+  '\ud83e\udd74': 'woozy_face',
+  '\ud83e\udd7d': 'disguised_face',
+  '\ud83e\udee1': 'saluting_face',
+  '\ud83e\udd79': 'holding_back_tears',
+  '\ud83e\udd2f': 'exploding_head',
+  '\ud83e\udd10': 'zipper_mouth',
+  '\ud83e\udd2b': 'shushing_face',
+  '\ud83e\udd14': 'thinking',
+  '\ud83e\udd28': 'raised_eyebrow',
+  '\ud83e\udee0': 'melting_face',
+  '\ud83e\udee2': 'face_with_open_eyes_and_hand_over_mouth',
+  '\ud83e\udee3': 'face_with_peeking_eye',
+  '\ud83e\udee4': 'face_with_diagonal_mouth',
+  '\ud83e\udee8': 'shaking_face'
+};
+
+function unsupportedEmojiText(match) {
+  return ':' + (UNSUPPORTED_EMOJI_NAMES[match] || 'emoji') + ':';
+}
+
 var WATCH_LINK_TLDS = {
   app: true,
   biz: true,
@@ -686,15 +715,20 @@ function replaceWatchEmojiAliases(value) {
 
 function replaceUnsupportedWatchEmoji(value) {
   return value.replace(/[\ud800-\udbff][\udc00-\udfff]/g, function(match) {
-    return WATCH_SUPPORTED_EMOJI_MAP[match] ? match : ':emoji:';
+    return WATCH_SUPPORTED_EMOJI_MAP[match] ? match : unsupportedEmojiText(match);
   });
 }
 
 function normalizeWatchString(value) {
+  var emojiSlots = [];
   return replaceUnsupportedWatchEmoji(replaceWatchEmojiAliases(String(value || '')))
     .replace(/[\u200b-\u200f\ufe00-\ufe0f\ufeff]/g, '')
     .replace(/[\ud800-\udbff][\udc00-\udfff]/g, function(match) {
-      return WATCH_SUPPORTED_EMOJI_MAP[match] ? match : ':emoji:';
+      if (!WATCH_SUPPORTED_EMOJI_MAP[match]) {
+        return unsupportedEmojiText(match);
+      }
+      emojiSlots.push(match);
+      return '~pe' + (emojiSlots.length - 1) + '~';
     })
     .replace(/[\u2018\u2019\u201a\u201b]/g, "'")
     .replace(/[\u201c\u201d\u201e\u201f]/g, '"')
@@ -702,7 +736,11 @@ function normalizeWatchString(value) {
     .replace(/\u2026/g, '...')
     .replace(/\u2191/g, 'up ')
     .replace(/\u2193/g, 'down ')
-    .replace(/[^\x20-\x7e]/g, ' ');
+    .replace(/[^\x20-\x7e]/g, ' ')
+    .replace(/~pe([0-9]+)~/g, function(match, index) {
+      var emoji = emojiSlots[Number(index)];
+      return emoji || match;
+    });
 }
 
 function clampText(value, maxLength) {
@@ -1314,12 +1352,45 @@ function storedMessage(chatId, messageId) {
 
 function sendFullMessageText(chatId, messageId) {
   var message = storedMessage(chatId, messageId);
-  var payload = {};
-  payload[MessageKeys.Type] = 'message_context';
-  payload[MessageKeys.MessageId] = clampText(messageId, 23);
-  payload[MessageKeys.Sender] = '';
-  payload[MessageKeys.Text] = watchText(message ? message.text : 'Message not loaded', MAX_CONTEXT_VIEW_TEXT);
-  sendToWatch(payload);
+  var fallback = message ? message.text : 'Message not loaded';
+  var loader = typeof activeReddit().fullText === 'function' ?
+    activeReddit().fullText(chatId, messageId) : Promise.resolve(fallback);
+  loader.then(function(text) {
+    var payload = {};
+    payload[MessageKeys.Type] = 'message_context';
+    payload[MessageKeys.MessageId] = clampText(messageId, 23);
+    payload[MessageKeys.Sender] = message && message.sender ? message.sender : '';
+    payload[MessageKeys.Text] = watchText(text || fallback, MAX_CONTEXT_VIEW_TEXT);
+    sendToWatch(payload);
+  }).catch(function() {
+    var payload = {};
+    payload[MessageKeys.Type] = 'message_context';
+    payload[MessageKeys.MessageId] = clampText(messageId, 23);
+    payload[MessageKeys.Sender] = message && message.sender ? message.sender : '';
+    payload[MessageKeys.Text] = watchText(fallback, MAX_CONTEXT_VIEW_TEXT);
+    sendToWatch(payload);
+  });
+}
+
+function expandReplies(chatId, markerId) {
+  if (typeof activeReddit().expandReplies !== 'function') {
+    error('Action unavailable');
+    return;
+  }
+  status('Loading replies...');
+  withTimeout(activeReddit().expandReplies(chatId, markerId), 'reply expansion timed out', MESSAGE_FETCH_TIMEOUT_MS).then(function(result) {
+    var rows = result && result.rows ? result.rows : [];
+    var anchor = result && result.anchorId ? result.anchorId : markerId;
+    if (!rows.length) {
+      done('messages_done', 0, 0);
+      status('No more replies');
+      return;
+    }
+    rememberMessages(chatId, rows);
+    restoreMessageWindow(chatId, anchor);
+  }).catch(function(err) {
+    promiseError('Replies failed', err);
+  });
 }
 
 function restoreMessageWindow(chatId, messageId) {
@@ -1543,11 +1614,17 @@ function getPlans() {
   });
 }
 
+function getPinnedCommunities() {
+  sendListRows('pinned', function() {
+    return activeReddit().plans();
+  });
+}
+
 function togglePlanPin(planId) {
   status('Updating pin...');
   withTimeout(activeReddit().togglePlanPin(planId), 'pin update timed out', MESSAGE_FETCH_TIMEOUT_MS).then(function(message) {
-    status(message || 'Subreddit updated');
-    getPlans();
+    status(message || 'Community updated');
+    getPinnedCommunities();
   }).catch(function(err) {
     promiseError('Pin failed', err);
   });
@@ -2166,15 +2243,20 @@ function imageRequestOptions(value) {
   var parts = text.split(':');
   var level = parseInt(parts[0], 10);
   var maxCost = parseInt(parts[1], 10);
+  var maxBytes = parseInt(parts[2], 10);
   if (!isFinite(level) || level < 0) {
     level = 0;
   }
   if (!isFinite(maxCost) || maxCost <= 0) {
     maxCost = 0;
   }
+  if (!isFinite(maxBytes) || maxBytes <= 0) {
+    maxBytes = 0;
+  }
   return {
     retryLevel: Math.min(3, level),
-    maxCost: Math.min(65000, maxCost)
+    maxCost: Math.min(65000, maxCost),
+    maxBytes: Math.min(65000, maxBytes)
   };
 }
 
@@ -2193,12 +2275,15 @@ function sendImage(chatId, messageId, requestText) {
   var requestOptions = imageRequestOptions(requestText);
   var message = storedMessage(chatId, messageId);
   var forceTall = messageNeedsSafeImagePath(message);
+  var maxBytes = requestOptions.maxBytes > 0 ?
+    Math.min(IMAGE_MAX_BYTES, requestOptions.maxBytes) :
+    IMAGE_MAX_BYTES;
   cancelQueuedAvatarTransfers();
   cancelQueuedImageTransfers();
   imageTransferActive = true;
   var requestSeq = imageRequestSeq;
   sendImageStatus(messageId, requestOptions.retryLevel > 0 ? 'Resizing' : 'Preparing');
-  withTimeout(activeReddit().imageBytes(chatId, messageId, IMAGE_WIDTH, IMAGE_SIZE, IMAGE_COLORS, IMAGE_MAX_BYTES,
+  withTimeout(activeReddit().imageBytes(chatId, messageId, IMAGE_WIDTH, IMAGE_SIZE, IMAGE_COLORS, maxBytes,
                                       IMAGE_MAX_PIXELS, requestOptions.retryLevel, requestOptions.maxCost, forceTall,
                                       function(text) {
                 if (requestSeq === imageRequestSeq && currentChatId === chatId) {
@@ -2468,8 +2553,10 @@ Pebble.addEventListener('appmessage', function(event) {
     getChats(false);
   } else if (command === 'get_group_chats') {
     getGroupChats(chatId);
-  } else if (command === 'get_plans' || command === 'get_subreddits') {
+  } else if (command === 'get_plans') {
     getPlans();
+  } else if (command === 'get_subreddits') {
+    getPinnedCommunities();
   } else if (command === 'toggle_plan_pin') {
     togglePlanPin(chatId);
   } else if (command === 'get_buckets' || command === 'get_sorts') {
@@ -2532,6 +2619,8 @@ Pebble.addEventListener('appmessage', function(event) {
     sendMessageContext(chatId, messageId);
   } else if (command === 'get_message_text') {
     sendFullMessageText(chatId, messageId);
+  } else if (command === 'expand_replies') {
+    expandReplies(chatId, messageId);
   } else if (command === 'restore_messages') {
     restoreMessageWindow(chatId, messageId);
   } else if (command === 'leave_chat') {

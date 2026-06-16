@@ -5,9 +5,12 @@ var imageInflight = {};
 var MAX_IMAGE_CACHE_ITEMS = 64;
 var MAX_PERSISTENT_IMAGE_CACHE_ITEMS = 32;
 var PERSISTENT_IMAGE_CACHE_ORDER_KEY = 'pgjs.imageCacheOrder';
-var IMAGE_CACHE_VERSION = 'v22';
+var IMAGE_CACHE_VERSION = 'v25';
 var MEDIA_PIPELINE_TIMEOUT_MS = 22000;
 var TALL_IMAGE_ASPECT = 1.85;
+var SMALL_PLATFORM_MAX_BYTES = 7000;
+var SMALL_TALL_IMAGE_WATCH_MAX_BYTES = 6200;
+var SMALL_TALL_PBI_MAX_PIXELS = 18000;
 var TALL_IMAGE_WATCH_MAX_BYTES = 9000;
 var EMERY_TALL_IMAGE_WATCH_MAX_BYTES = 14000;
 var GABBRO_TALL_IMAGE_WATCH_MAX_BYTES = 11000;
@@ -17,6 +20,11 @@ var IMAGE_RETRY_PROFILES = [
   {maxBytes: 18000, maxPixels: 36000},
   {maxBytes: 12000, maxPixels: 30000},
   {maxBytes: 9000, maxPixels: 24000}
+];
+var SMALL_IMAGE_RETRY_PROFILES = [
+  {byteScale: 0.96, maxPixels: 18000},
+  {byteScale: 0.92, maxPixels: 16000},
+  {byteScale: 0.88, maxPixels: 14000}
 ];
 var EMERY_TALL_PBI_MAX_BYTES = 18000;
 var EMERY_TALL_PBI_MAX_PIXELS = 36000;
@@ -168,6 +176,29 @@ function liftChannel(value) {
   return Math.min(255, Math.round((Math.pow(value / 255, 0.82) * 255) + 4));
 }
 
+function darkScreenshotChannel(value) {
+  if (value < 96) {
+    return Math.max(0, Math.round(value * 0.55));
+  }
+  if (value < 160) {
+    return Math.max(0, Math.round(96 + ((value - 96) * 0.86)));
+  }
+  return value;
+}
+
+function lightScreenshotChannel(value) {
+  if (value >= 248) {
+    return 255;
+  }
+  if (value >= 210) {
+    return Math.max(0, Math.round(186 + ((value - 210) * 0.74)));
+  }
+  if (value >= 128) {
+    return Math.max(0, Math.round(value * 0.9));
+  }
+  return Math.max(0, Math.round(value * 0.82));
+}
+
 function ditherOffset(x, y) {
   var matrix = [
     0, 8, 2, 10,
@@ -178,9 +209,22 @@ function ditherOffset(x, y) {
   return matrix[((y & 3) * 4) + (x & 3)] - 7.5;
 }
 
-function toneChannel(value, x, y) {
+function toneChannel(value, x, y, mode) {
+  if (mode === 'dark') {
+    return darkScreenshotChannel(value);
+  }
+  if (mode === 'light') {
+    return lightScreenshotChannel(value);
+  }
   var lifted = liftChannel(value);
   return Math.max(0, Math.min(255, Math.round(lifted + ditherOffset(x, y) * 1.4)));
+}
+
+function channelToneMode(value) {
+  if (value === 'dark' || value === 'light') {
+    return value;
+  }
+  return value ? 'lift' : '';
 }
 
 function resizeCover(source, width, height, maskCircle, liftColors) {
@@ -201,6 +245,7 @@ function resizeCover(source, width, height, maskCircle, liftColors) {
   var dstIndex;
   var dx;
   var dy;
+  var toneMode = channelToneMode(liftColors);
 
   for (y = 0; y < height; y += 1) {
     srcY = Math.min(source.height - 1, Math.max(0, Math.floor(startY + y / scale)));
@@ -208,9 +253,9 @@ function resizeCover(source, width, height, maskCircle, liftColors) {
       srcX = Math.min(source.width - 1, Math.max(0, Math.floor(startX + x / scale)));
       srcIndex = (srcY * source.width + srcX) * 4;
       dstIndex = (y * width + x) * 4;
-      output[dstIndex] = liftColors ? toneChannel(source.data[srcIndex], x, y) : source.data[srcIndex];
-      output[dstIndex + 1] = liftColors ? toneChannel(source.data[srcIndex + 1], x, y) : source.data[srcIndex + 1];
-      output[dstIndex + 2] = liftColors ? toneChannel(source.data[srcIndex + 2], x, y) : source.data[srcIndex + 2];
+      output[dstIndex] = toneMode ? toneChannel(source.data[srcIndex], x, y, toneMode) : source.data[srcIndex];
+      output[dstIndex + 1] = toneMode ? toneChannel(source.data[srcIndex + 1], x, y, toneMode) : source.data[srcIndex + 1];
+      output[dstIndex + 2] = toneMode ? toneChannel(source.data[srcIndex + 2], x, y, toneMode) : source.data[srcIndex + 2];
       if (maskCircle) {
         dx = x - cx;
         dy = y - cy;
@@ -241,6 +286,7 @@ function resizeContain(source, width, height, liftColors) {
   var srcY;
   var srcIndex;
   var dstIndex;
+  var toneMode = channelToneMode(liftColors);
 
   for (y = 0; y < outputHeight; y += 1) {
     srcY = Math.min(source.height - 1, Math.max(0, Math.floor(y / scale)));
@@ -248,9 +294,9 @@ function resizeContain(source, width, height, liftColors) {
       srcX = Math.min(source.width - 1, Math.max(0, Math.floor(x / scale)));
       srcIndex = (srcY * source.width + srcX) * 4;
       dstIndex = (y * outputWidth + x) * 4;
-      output[dstIndex] = liftColors ? toneChannel(source.data[srcIndex], x, y) : source.data[srcIndex];
-      output[dstIndex + 1] = liftColors ? toneChannel(source.data[srcIndex + 1], x, y) : source.data[srcIndex + 1];
-      output[dstIndex + 2] = liftColors ? toneChannel(source.data[srcIndex + 2], x, y) : source.data[srcIndex + 2];
+      output[dstIndex] = toneMode ? toneChannel(source.data[srcIndex], x, y, toneMode) : source.data[srcIndex];
+      output[dstIndex + 1] = toneMode ? toneChannel(source.data[srcIndex + 1], x, y, toneMode) : source.data[srcIndex + 1];
+      output[dstIndex + 2] = toneMode ? toneChannel(source.data[srcIndex + 2], x, y, toneMode) : source.data[srcIndex + 2];
       output[dstIndex + 3] = 255;
     }
   }
@@ -397,14 +443,17 @@ function encodePbi4(resized) {
 
 function compactPbi4(source, width, height, maxBytes, maxPixels, options) {
   var encodeBox = fitEncodeBoxForPixelBudget(source, width, height, maxPixels);
-  var scaleSteps = [1, 0.94, 0.88, 0.8, 0.72, 0.64, 0.56, 0.48, 0.4];
+  var scaleSteps = maxBytes <= SMALL_PLATFORM_MAX_BYTES ?
+                   [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.42, 0.36, 0.32, 0.28] :
+                   [1, 0.94, 0.88, 0.8, 0.72, 0.64, 0.56, 0.48, 0.4];
+  var toneMode = messageImageToneMode(source);
   var best = null;
   for (var step = 0; step < scaleSteps.length; step += 1) {
     throwIfCancelled(options);
     var resized = resizeContain(source,
                                 Math.max(32, Math.floor(encodeBox.width * scaleSteps[step])),
                                 Math.max(32, Math.floor(encodeBox.height * scaleSteps[step])),
-                                true);
+                                toneMode);
     var encoded = encodePbi4(resized);
     if (!best || encoded.length < best.length) {
       best = encoded;
@@ -426,6 +475,12 @@ function tallPbiBudget(maxBytes, maxPixels, options) {
     return {
       maxBytes: maxBytes,
       maxPixels: maxPixels
+    };
+  }
+  if (platformMaxBytes <= SMALL_PLATFORM_MAX_BYTES) {
+    return {
+      maxBytes: Math.min(maxBytes, SMALL_TALL_IMAGE_WATCH_MAX_BYTES),
+      maxPixels: maxPixels ? Math.min(maxPixels, SMALL_TALL_PBI_MAX_PIXELS) : SMALL_TALL_PBI_MAX_PIXELS
     };
   }
   if (platformMaxBytes >= 24000 || platformMaxPixels >= 40000) {
@@ -477,6 +532,62 @@ function imageStats(source) {
     mostlyTransparent: count > 0 && transparent / count > 0.92,
     hasNonWhiteDetail: count > 0 && dark / count > 0.08
   };
+}
+
+function messageImageToneMode(source) {
+  var pixels = source.width * source.height;
+  var step = Math.max(1, Math.floor(pixels / 1600));
+  var count = 0;
+  var lumaTotal = 0;
+  var dark = 0;
+  var midDark = 0;
+  var light = 0;
+  var nearWhite = 0;
+  var saturated = 0;
+  for (var i = 0; i < pixels; i += step) {
+    var index = i * 4;
+    var r = source.data[index];
+    var g = source.data[index + 1];
+    var b = source.data[index + 2];
+    var max = Math.max(r, g, b);
+    var min = Math.min(r, g, b);
+    var luma = (r * 0.299) + (g * 0.587) + (b * 0.114);
+    lumaTotal += luma;
+    if (luma < 96) {
+      dark += 1;
+    }
+    if (luma >= 42 && luma < 140) {
+      midDark += 1;
+    }
+    if (luma > 178) {
+      light += 1;
+    }
+    if (luma > 222) {
+      nearWhite += 1;
+    }
+    if (max - min > 58) {
+      saturated += 1;
+    }
+    count += 1;
+  }
+  if (count <= 0) {
+    return false;
+  }
+  var average = lumaTotal / count;
+  var darkRatio = dark / count;
+  var midDarkRatio = midDark / count;
+  var lightRatio = light / count;
+  var nearWhiteRatio = nearWhite / count;
+  var saturatedRatio = saturated / count;
+  if (average < 112 && darkRatio > 0.42 && midDarkRatio > 0.18 &&
+      lightRatio < 0.45 && saturatedRatio < 0.48) {
+    return 'dark';
+  }
+  if (average > 174 && lightRatio > 0.58 && nearWhiteRatio > 0.22 &&
+      darkRatio < 0.28 && saturatedRatio < 0.38) {
+    return 'light';
+  }
+  return false;
 }
 
 function encodedLooksBlank(encoded, sourceStats) {
@@ -663,6 +774,13 @@ function applyImageRetryProfile(maxBytes, maxPixels, retryLevel) {
       maxPixels: maxPixels
     };
   }
+  if (maxBytes <= SMALL_PLATFORM_MAX_BYTES) {
+    var smallProfile = SMALL_IMAGE_RETRY_PROFILES[retryLevel - 1];
+    return {
+      maxBytes: Math.max(3000, Math.floor(maxBytes * smallProfile.byteScale)),
+      maxPixels: maxPixels ? Math.min(maxPixels, smallProfile.maxPixels) : smallProfile.maxPixels
+    };
+  }
   var profile = IMAGE_RETRY_PROFILES[retryLevel - 1];
   return {
     maxBytes: Math.min(maxBytes, profile.maxBytes),
@@ -697,6 +815,9 @@ function fitEncodeBoxForPixelBudget(source, width, height, maxPixels) {
 }
 
 function tallWatchMaxBytes(maxBytes, maxPixels) {
+  if (maxBytes <= SMALL_PLATFORM_MAX_BYTES) {
+    return SMALL_TALL_IMAGE_WATCH_MAX_BYTES;
+  }
   if (maxBytes >= 24000 && maxPixels >= 40000) {
     return EMERY_TALL_IMAGE_WATCH_MAX_BYTES;
   }
@@ -711,8 +832,11 @@ function compactMessagePngAsync(source, width, height, colors, maxBytes, options
   var tall = isTallSource(source);
   var costLimit = tall || (options && options.retryLevel > 0) ? maxCost : 0;
   var watchSafeMaxBytes = tall ? Math.min(maxBytes, tallWatchMaxBytes(maxBytes, maxPixels || 0)) : maxBytes;
+  var toneMode = messageImageToneMode(source);
   var normalScaleSteps = maxBytes >= 24000 ?
                          [1, 0.96, 0.92, 0.88, 0.82, 0.75, 0.67, 0.58, 0.5, 0.42] :
+                         maxBytes <= SMALL_PLATFORM_MAX_BYTES ?
+                         [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.42, 0.36, 0.32, 0.28] :
                          [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.42];
   width = encodeBox.width;
   height = encodeBox.height;
@@ -720,17 +844,17 @@ function compactMessagePngAsync(source, width, height, colors, maxBytes, options
     if (DEBUG_LOGS) {
       debugLog('tall image watch-safe budget ' + watchSafeMaxBytes + 'b/' + (costLimit || 0) + 'c at ' + width + 'x' + height);
     }
-    return compactPngAsync(source, width, height, Math.min(colors, 32), watchSafeMaxBytes, false, true,
+    return compactPngAsync(source, width, height, Math.min(colors, 32), watchSafeMaxBytes, false, toneMode,
                            [1, 0.85, 0.7, 0.56, 0.45, 0.36, 0.32], 'contain', options, costLimit).catch(function(tallErr) {
       if (DEBUG_LOGS) {
         debugLog('tall image compact path: ' + (tallErr && tallErr.message ? tallErr.message : tallErr));
       }
       throwIfCancelled(options);
-      return compactPngAsync(source, width, height, 16, watchSafeMaxBytes, false, true,
+      return compactPngAsync(source, width, height, 16, watchSafeMaxBytes, false, toneMode,
                              [0.5, 0.42, 0.35, 0.3, 0.26], 'contain', options, costLimit);
     });
   }
-  return compactPngAsync(source, width, height, colors, watchSafeMaxBytes, false, true,
+  return compactPngAsync(source, width, height, colors, watchSafeMaxBytes, false, toneMode,
                          normalScaleSteps, 'contain', options, costLimit).catch(function(err) {
     if (!tall) {
       throw err;
@@ -739,7 +863,7 @@ function compactMessagePngAsync(source, width, height, colors, maxBytes, options
       debugLog('tall image encode fallback: ' + (err && err.message ? err.message : err));
     }
     throwIfCancelled(options);
-    return compactPngAsync(source, width, height, Math.min(colors, 32), watchSafeMaxBytes, false, true,
+    return compactPngAsync(source, width, height, Math.min(colors, 32), watchSafeMaxBytes, false, toneMode,
                            [0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35, 0.32],
                            'contain', options, costLimit);
   });
@@ -880,7 +1004,8 @@ function cachedBytes(key, label, downloader, width, height, colors, maxBytes, ma
     source = rgbaBuffer(bytes);
     throwIfCancelled(options);
     var tall = options && options.forceTall || isTallSource(source);
-    imageStatus(options, tall && !maskCircle ? 'Packing' : 'Encoding');
+    var directBitmap = !maskCircle && maxBytes <= SMALL_PLATFORM_MAX_BYTES;
+    imageStatus(options, (tall || directBitmap) && !maskCircle ? 'Packing' : 'Encoding');
     if (maskCircle) {
       return Promise.resolve(safeCompactPng(source, width, height, colors, maxBytes, true)).then(function(encoded) {
         throwIfCancelled(options);
@@ -892,7 +1017,7 @@ function cachedBytes(key, label, downloader, width, height, colors, maxBytes, ma
         return encoded;
       });
     }
-    if (tall) {
+    if (tall || directBitmap) {
       var pbiBudget = tallPbiBudget(maxBytes, maxPixels, options);
       maxBytes = pbiBudget.maxBytes;
       maxPixels = pbiBudget.maxPixels;
@@ -970,7 +1095,6 @@ function graphImageBytes(chatId, messageId, downloader, width, height, colors, m
   var retryProfile = applyImageRetryProfile(maxBytes, maxPixels, retryLevel);
   maxBytes = retryProfile.maxBytes;
   maxPixels = retryProfile.maxPixels;
-  height = height * 2;
   key = cacheKey('teams:' + chatId, messageId, width, height, colors, maxBytes, maxPixels, maxCost, forceTall);
   return cachedBytes(key, 'teams image ' + messageId, function() {
     if (status) {

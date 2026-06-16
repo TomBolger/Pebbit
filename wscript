@@ -68,7 +68,7 @@ def copy_latest_pbw_to_my_drive(ctx):
     local_targets = ['/mnt/i/My drive', '/mnt/i/My Drive']
     for target in local_targets:
         if os.path.isdir(target):
-            shutil.copy2(pbw, os.path.join(target, 'Pebbit.pbw'))
+            shutil.copyfile(pbw, os.path.join(target, 'Pebbit.pbw'))
             ctx.to_log('Copied Pebbit.pbw to {}\n'.format(target))
             return
 

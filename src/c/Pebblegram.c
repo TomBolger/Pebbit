@@ -18,11 +18,11 @@
 
 #define MAX_CHATS 12
 #define MAX_ASSIGNEE_OPTIONS PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 3, 3, 3, 3, 5, 5, 5)
-#define MAX_MESSAGES 3
+#define MAX_MESSAGES 6
 #define MAX_BUCKET_OPTIONS 10
 #define DATE_CHOICE_COUNT 5
-#define MAX_TEXT 64
-#define MAX_FULL_TEXT 900
+#define MAX_TEXT 180
+#define MAX_FULL_TEXT 1900
 #define MESSAGE_PREVIEW_TEXT PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 120, 120, 120, 120, 220, 220, 220)
 #define MAX_SENDER 36
 #define MAX_REACTIONS 17
@@ -30,8 +30,8 @@
 #define MAX_CONTEXT_TEXT PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 44, 38, 38, 38, 62, 58, 54)
 #define MAX_CONTEXT_SENDER_TEXT PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 16, 14, 14, 14, 26, 24, 22)
 #define MAX_CONTEXT_BODY_TEXT PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 24, 20, 20, 20, 46, 40, 36)
-#define MAX_ID 24
-#define MAX_IMAGE_ERROR 24
+#define MAX_ID 20
+#define MAX_IMAGE_ERROR 20
 #define MAX_IMAGE_BYTES PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 10000, 6500, 6500, 6000, 30000, 15000, 15000)
 #define MAX_AVATAR_BYTES PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 5000, 5000, 5000, 3000, 5000, 5000, 5000)
 #define MAX_LOADED_IMAGES 1
@@ -47,8 +47,6 @@
 #define BW_UI PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 0, 0, 0, 1, 0, 0, 0)
 #define ROUND_UI PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 0, 0, 0, 0, 0, 0, 1)
 #define STATUS_H PBL_PLATFORM_SWITCH(PBL_PLATFORM_TYPE_CURRENT, 24, 24, 24, 24, 24, 24, 22)
-#define MAX_CANNED 3
-#define CANNED_TEXT_LEN 20
 #define PLANNER_LABEL_COUNT 6
 #define PLANNER_LABEL_TEXT_LEN 24
 #define PG_MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -109,7 +107,7 @@
 #define DICTATION_START_DELAY_MS 900
 #define DICTATION_CONFIRM_DELAY_MS 800
 #define TOUCH_KEYBOARD_ENABLED 0
-#define TOUCH_KEYBOARD_MAX_TEXT 120
+#define TOUCH_KEYBOARD_MAX_TEXT 96
 #define TOUCH_KEYBOARD_INPUT_H 30
 #define TOUCH_KEYBOARD_ROW_H 21
 #define TOUCH_KEYBOARD_ROWS 4
@@ -230,7 +228,6 @@ typedef enum {
   ActionItemAssignAdd,
   ActionItemAssignTeam,
   ActionItemAssignMember,
-  ActionItemSubredditsPin,
   ActionItemConfirmSend,
   ActionItemConfirmCancel,
   ActionItemGoBack
@@ -300,27 +297,6 @@ typedef struct {
   uint8_t *image_data;
 } Message;
 
-typedef struct {
-  const char *token;
-  const char *glyph;
-} ReactionChoice;
-
-static const ReactionChoice REACTION_GRID_CHOICES[] = {
-  {"like", "\xF0\x9F\x91\x8D"},
-  {"heart", "\xE2\x9D\xA4"},
-  {"laugh", "\xF0\x9F\xA4\xA3"},
-  {"wow", "\xF0\x9F\x98\xB1"},
-  {"sad", "\xF0\x9F\x98\xA2"},
-  {"angry", "\xF0\x9F\x98\xA1"},
-  {"remove", "Remove"}
-};
-
-static const char *const EMOJI_REPLY_CHOICES[] = {
-  "👍", "❤", "😂", "😱",
-  "👎", "🙏", "✅", "❗",
-  "⭐", "💯", "🎉", "⌚"
-};
-
 static const int DATE_CHOICE_OFFSETS[DATE_CHOICE_COUNT] = {
   0, 1, 2, 3, 7
 };
@@ -349,29 +325,86 @@ static int s_full_text_scroll_offset;
 static int s_full_text_height;
 static bool s_full_text_context;
 static bool s_full_text_unloaded_messages;
-static char s_full_text_title[MAX_SENDER + 10];
-static char s_full_text_message_id[MAX_ID];
-static char s_message_restore_id[MAX_ID];
 static char *s_full_text_body;
-static char s_action_label_edit[36];
-static char s_action_label_delete[36];
 
 static DictationSession *s_dictation_session;
 static bool s_dictation_in_progress;
 
+typedef struct {
+  char full_text_title[MAX_SENDER + 10];
+  char full_text_message_id[MAX_ID];
+  char message_restore_id[MAX_ID];
+  char action_label_edit[36];
+  char action_label_delete[36];
+  char image_message_id[MAX_ID];
+  char selected_image_focus_id[MAX_ID];
+  char avatar_chat_id[MAX_ID];
+  char pending_text[MAX_TEXT];
+  char pending_edit_message_id[MAX_ID];
+  char pending_chat_command[24];
+  char pending_subreddit_source_id[MAX_ID];
+  char current_chat_id[MAX_ID];
+  char current_chat_title[36];
+  char status_text[40];
+  char chat_refresh_selected_id[MAX_ID];
+  char chat_list_selected_id[MAX_ID];
+  char current_plan_id[MAX_ID];
+  char current_plan_title[36];
+  char current_bucket_id[MAX_ID];
+  char current_bucket_title[36];
+  char assign_selected_team_id[MAX_ID];
+  char date_command[24];
+  char date_label[20];
+  char date_target_id[MAX_ID];
+  char subreddit_refresh_anchor_id[MAX_ID];
+  char older_anchor_id[MAX_ID];
+  char newer_anchor_id[MAX_ID];
+  SubredditsIntent subreddit_intent;
+  SubredditsWireCommand subreddit_wire_command;
+} PebbitHeapState;
+
+static PebbitHeapState *s_heap_state;
+#define s_full_text_title (s_heap_state->full_text_title)
+#define s_full_text_message_id (s_heap_state->full_text_message_id)
+#define s_message_restore_id (s_heap_state->message_restore_id)
+#define s_action_label_edit (s_heap_state->action_label_edit)
+#define s_action_label_delete (s_heap_state->action_label_delete)
+#define s_image_message_id (s_heap_state->image_message_id)
+#define s_selected_image_focus_id (s_heap_state->selected_image_focus_id)
+#define s_avatar_chat_id (s_heap_state->avatar_chat_id)
+#define s_pending_text (s_heap_state->pending_text)
+#define s_pending_edit_message_id (s_heap_state->pending_edit_message_id)
+#define s_pending_chat_command (s_heap_state->pending_chat_command)
+#define s_pending_subreddit_source_id (s_heap_state->pending_subreddit_source_id)
+#define s_current_chat_id (s_heap_state->current_chat_id)
+#define s_current_chat_title (s_heap_state->current_chat_title)
+#define s_status_text (s_heap_state->status_text)
+#define s_chat_refresh_selected_id (s_heap_state->chat_refresh_selected_id)
+#define s_chat_list_selected_id (s_heap_state->chat_list_selected_id)
+#define s_current_plan_id (s_heap_state->current_plan_id)
+#define s_current_plan_title (s_heap_state->current_plan_title)
+#define s_current_bucket_id (s_heap_state->current_bucket_id)
+#define s_current_bucket_title (s_heap_state->current_bucket_title)
+#define s_assign_selected_team_id (s_heap_state->assign_selected_team_id)
+#define s_date_command (s_heap_state->date_command)
+#define s_date_label (s_heap_state->date_label)
+#define s_date_target_id (s_heap_state->date_target_id)
+#define s_subreddit_refresh_anchor_id (s_heap_state->subreddit_refresh_anchor_id)
+#define s_older_anchor_id (s_heap_state->older_anchor_id)
+#define s_newer_anchor_id (s_heap_state->newer_anchor_id)
+#define s_subreddit_intent (s_heap_state->subreddit_intent)
+#define s_subreddit_wire_command (s_heap_state->subreddit_wire_command)
+
 static Chat *s_chats;
-static Message s_messages[MAX_MESSAGES];
+static Message *s_messages;
 static Message *s_message_stage;
-static int s_message_y[MAX_MESSAGES];
-static int s_message_h[MAX_MESSAGES];
+static int *s_message_y;
+static int *s_message_h;
 static int s_compose_bubble_y;
 static uint8_t *s_image_buffer;
 static uint8_t *s_avatar_buffer;
 static uint16_t s_image_buffer_capacity;
 static uint16_t s_avatar_buffer_capacity;
-static char s_image_message_id[MAX_ID];
-static char s_selected_image_focus_id[MAX_ID];
-static char s_avatar_chat_id[MAX_ID];
 static int s_image_size;
 static int s_image_received;
 static int s_image_expected_offset;
@@ -382,16 +415,7 @@ static int s_avatar_received;
 static int s_avatar_expected_offset;
 static int s_avatar_transfer_id;
 static int s_loaded_image_count;
-static char s_canned[MAX_CANNED][CANNED_TEXT_LEN] = {
-  "Yes",
-  "No",
-  "Thanks"
-};
 static char *s_subreddit_labels_packed;
-static char s_pending_text[MAX_TEXT];
-static char s_pending_edit_message_id[MAX_ID];
-static char s_pending_chat_command[24];
-static char s_pending_subreddit_source_id[MAX_ID];
 static bool s_pending_send_as_reply;
 static bool s_touch_keyboard_open;
 #if TOUCH_KEYBOARD_AVAILABLE
@@ -399,12 +423,7 @@ static bool s_touch_keyboard_symbols;
 static bool s_touch_keyboard_shift;
 static char s_touch_keyboard_sent_text[TOUCH_KEYBOARD_MAX_TEXT];
 #endif
-static char s_current_chat_id[MAX_ID];
-static char s_current_chat_title[36];
-static char s_status_text[40];
-static char s_loading_text[64] = "Loading...";
-static char s_chat_refresh_selected_id[MAX_ID];
-static char s_chat_list_selected_id[MAX_ID];
+static char s_loading_text[20] = "Loading...";
 
 static int s_chat_count;
 static int s_message_count;
@@ -423,10 +442,6 @@ static int s_message_scroll_direction;
 static ViewState s_view_state;
 static ListMode s_list_mode;
 static int s_selected_checklist_item;
-static char s_current_plan_id[MAX_ID];
-static char s_current_plan_title[36];
-static char s_current_bucket_id[MAX_ID];
-static char s_current_bucket_title[36];
 static bool s_viewing_completed_tasks;
 static bool s_checklist_edit_mode;
 static bool s_reddit_detail_request;
@@ -439,13 +454,6 @@ static AssigneeOption *s_assign_team_options;
 static int s_assign_team_option_count;
 static AssigneeOption *s_assign_member_options;
 static int s_assign_member_option_count;
-static char s_assign_selected_team_id[MAX_ID];
-static SubredditsIntent s_subreddit_intent;
-static SubredditsWireCommand s_subreddit_wire_command;
-static char s_date_command[24];
-static char s_date_label[20];
-static char s_date_target_id[MAX_ID];
-static char s_subreddit_refresh_anchor_id[MAX_ID];
 static int s_subreddit_refresh_anchor_checklist_item;
 static bool s_subreddit_refresh_anchor_valid;
 static bool s_bridge_ready;
@@ -464,8 +472,6 @@ static bool s_message_stream_silent;
 static int s_chat_loading_progress;
 static int s_older_anchor_y;
 static int s_newer_anchor_y;
-static char s_older_anchor_id[MAX_ID];
-static char s_newer_anchor_id[MAX_ID];
 static AppTimer *s_chat_scroll_timer;
 static AppTimer *s_message_timeout_timer;
 static AppTimer *s_message_retry_timer;
@@ -519,6 +525,9 @@ static void send_pending_subreddit_action(void);
 static bool pending_command_is_subreddit_action(void);
 static void set_pending_subreddit_voice_action(const char *command, const char *message_id);
 static void commit_pending_text_action(void);
+static bool subreddit_detail_row_is_top_post(int index);
+static int subreddit_detail_bubble_width(GRect safe, int index);
+static int subreddit_detail_indent_for_index(int index);
 static void subreddit_intent_timer_callback(void *data);
 static void capture_subreddit_intent(ActionItem item, int index);
 static void schedule_captured_subreddit_intent(uint32_t delay_ms);
@@ -561,6 +570,7 @@ static int touch_keyboard_height(void);
 static void touch_handler(const TouchEvent *event, void *context);
 #endif
 static bool selected_message_is_truncated(void);
+static bool selected_message_is_thread_marker(void);
 static bool selected_message_has_context(void);
 static bool has_selected_message(void);
 static bool cstr_equal_ignore_case(const char *a, const char *b);
@@ -578,33 +588,6 @@ static void ensure_selected_checklist_item_visible(bool animated);
 static int subreddit_message_index_for(const char *id, const char *kind);
 static void chat_scroll_timer_callback(void *data);
 static void messages_root_update_proc(Layer *layer, GContext *ctx);
-
-static void update_canned_replies(const char *packed) {
-  if (!packed || !packed[0]) {
-    return;
-  }
-
-  char buffer[MAX_CANNED * CANNED_TEXT_LEN];
-  copy_cstr(buffer, sizeof(buffer), packed);
-  for (int i = 0; i < MAX_CANNED; i++) {
-    s_canned[i][0] = '\0';
-  }
-
-  char *cursor = buffer;
-  for (int i = 0; i < MAX_CANNED; i++) {
-    char *separator = strchr(cursor, '|');
-    if (separator) {
-      *separator = '\0';
-    }
-    if (cursor[0]) {
-      copy_cstr(s_canned[i], sizeof(s_canned[i]), cursor);
-    }
-    if (!separator) {
-      break;
-    }
-    cursor = separator + 1;
-  }
-}
 
 static void update_subreddit_labels(const char *packed) {
   if (s_subreddit_labels_packed) {
@@ -645,16 +628,6 @@ static void subreddit_label_text(int index, char *dest, size_t dest_size) {
   len = PG_MIN(len, dest_size - 1);
   memcpy(dest, start, len);
   dest[len] = '\0';
-}
-
-static int canned_reply_count(void) {
-  int count = 0;
-  for (int i = 0; i < MAX_CANNED; i++) {
-    if (s_canned[i][0]) {
-      count++;
-    }
-  }
-  return PG_MAX(1, count);
 }
 
 static int utf8_expected_bytes(unsigned char lead) {
@@ -969,6 +942,20 @@ static int message_image_frame_width(int bubble_w) {
   return PG_MIN(IMAGE_THUMB_SIZE + IMAGE_FRAME_EXTRA_W, bubble_w - 10);
 }
 
+static int message_image_frame_width_for_index(int index, GRect bounds) {
+  int bubble_w = message_bubble_width(bounds);
+  if (subreddit_detail_active() && index >= 0) {
+    GRect safe = round_safe_rect(bounds);
+    bubble_w = subreddit_detail_bubble_width(safe, index);
+    int text_w = bubble_w - 10;
+    if (!subreddit_detail_row_is_top_post(index)) {
+      text_w = PG_MAX(1, text_w - 5);
+    }
+    return PG_MAX(32, text_w);
+  }
+  return message_image_frame_width(bubble_w);
+}
+
 static int chat_status_y(void) {
   return ROUND_UI ? 6 : 0;
 }
@@ -1257,6 +1244,11 @@ static void destroy_message_images(void) {
   s_selected_image_focus_id[0] = '\0';
   return;
 #else
+  if (!s_messages) {
+    s_loaded_image_count = 0;
+    reset_image_transfer_state();
+    return;
+  }
   if (s_image_retry_timer) {
     app_timer_cancel(s_image_retry_timer);
     s_image_retry_timer = NULL;
@@ -1314,26 +1306,35 @@ static bool message_needs_image(Message *message) {
 }
 
 static int message_image_display_width(const Message *message, int max_w) {
-  int frame_w = PG_MAX(32, PG_MIN(max_w, IMAGE_THUMB_SIZE + IMAGE_FRAME_EXTRA_W));
+  int frame_w = PG_MAX(32, max_w);
   if (!message || message->image_width <= 0 || message->image_height <= 0) {
     return frame_w;
+  }
+  if (message->image_bitmap && message->image_width < frame_w) {
+    return PG_MAX(32, (int)message->image_width);
   }
   return frame_w;
 }
 
 static int message_image_display_height(const Message *message, int max_w) {
   int w = message_image_display_width(message, max_w);
+  if (message && !message->image_bitmap && message->image_requested && message->image_progress == 0) {
+    return 52;
+  }
   if (!message || message->image_width <= 0 || message->image_height <= 0) {
     return w;
   }
   int h = ((int)message->image_height * w) / (int)message->image_width;
+  if (message->image_bitmap) {
+    return PG_MAX(1, h);
+  }
   int min_h = PG_MAX(32, (w * 3) / 4);
-  int max_h = PG_MAX(min_h, (w * 4) / 3);
+  int max_h = PG_MAX(min_h, w * IMAGE_TALL_MAX_MULTIPLIER);
   return PG_MAX(min_h, PG_MIN(max_h, h));
 }
 
 static int message_index_from_ptr(Message *message) {
-  if (!message || message < s_messages || message >= s_messages + MAX_MESSAGES) {
+  if (!message || !s_messages || message < s_messages || message >= s_messages + MAX_MESSAGES) {
     return -1;
   }
   return (int)(message - s_messages);
@@ -1368,8 +1369,8 @@ static bool message_image_near_viewport(int index, int margin) {
     return false;
   }
   GRect bounds = layer_get_bounds(s_messages_root);
-  int bubble_w = message_bubble_width(bounds);
-  int image_h = message_image_display_height(&s_messages[index], message_image_frame_width(bubble_w));
+  int image_w = message_image_frame_width_for_index(index, bounds);
+  int image_h = message_image_display_height(&s_messages[index], image_w);
   int image_top = s_message_y[index] + s_message_h[index] - image_h - 4;
   int image_bottom = image_top + image_h;
   return image_bottom >= s_chat_scroll_offset - margin &&
@@ -1403,8 +1404,8 @@ static int message_image_focus_distance(int index) {
   }
   GRect bounds = layer_get_bounds(s_messages_root);
   int focus_y = s_chat_scroll_offset + (bounds.size.h / 2);
-  int bubble_w = message_bubble_width(bounds);
-  int image_h = message_image_display_height(&s_messages[index], message_image_frame_width(bubble_w));
+  int image_w = message_image_frame_width_for_index(index, bounds);
+  int image_h = message_image_display_height(&s_messages[index], image_w);
   int image_y = s_message_y[index] + s_message_h[index] - (image_h / 2) - 4;
   return abs(image_y - focus_y);
 #endif
@@ -1421,9 +1422,9 @@ static MEDIA_ONLY_UNUSED bool message_needs_decode_headroom(const Message *messa
     return false;
   }
   GRect bounds = layer_get_bounds(s_messages_root);
-  int bubble_w = message_bubble_width(bounds);
-  int image_w = message_image_display_width(message, message_image_frame_width(bubble_w));
-  int image_h = message_image_display_height(message, message_image_frame_width(bubble_w));
+  int image_max_w = message_image_frame_width_for_index(message_index_from_ptr((Message *)message), bounds);
+  int image_w = message_image_display_width(message, image_max_w);
+  int image_h = message_image_display_height(message, image_max_w);
   return image_w * image_h >= IMAGE_DECODE_HEADROOM_PIXELS;
 }
 
@@ -1651,7 +1652,7 @@ static bool send_command_with_status(const char *command, const char *chat_id, c
   if (dict_result != DICT_OK) {
     DBG("PTDBG send_command command write failed dict=%d", (int)dict_result);
     if (show_failures) {
-      show_status("Command write fail");
+      show_status("Write fail");
     }
     return false;
   }
@@ -1660,7 +1661,7 @@ static bool send_command_with_status(const char *command, const char *chat_id, c
     if (dict_result != DICT_OK) {
       DBG("PTDBG send_command chat write failed dict=%d", (int)dict_result);
       if (show_failures) {
-        show_status("Chat ID write fail");
+      show_status("ID fail");
       }
       return false;
     }
@@ -1670,7 +1671,7 @@ static bool send_command_with_status(const char *command, const char *chat_id, c
     if (dict_result != DICT_OK) {
       DBG("PTDBG send_command text write failed dict=%d", (int)dict_result);
       if (show_failures) {
-        show_status("Text write fail");
+      show_status("Text fail");
       }
       return false;
     }
@@ -1680,7 +1681,7 @@ static bool send_command_with_status(const char *command, const char *chat_id, c
     if (dict_result != DICT_OK) {
       DBG("PTDBG send_command reply write failed dict=%d", (int)dict_result);
       if (show_failures) {
-        show_status("Reply write fail");
+      show_status("Reply fail");
       }
       return false;
     }
@@ -1690,7 +1691,7 @@ static bool send_command_with_status(const char *command, const char *chat_id, c
     if (dict_result != DICT_OK) {
       DBG("PTDBG send_command edit id write failed dict=%d", (int)dict_result);
       if (show_failures) {
-        show_status("Edit ID write fail");
+      show_status("Edit fail");
       }
       return false;
     }
@@ -1700,7 +1701,7 @@ static bool send_command_with_status(const char *command, const char *chat_id, c
     if (dict_result != DICT_OK) {
       DBG("PTDBG send_command msg id write failed dict=%d", (int)dict_result);
       if (show_failures) {
-        show_status("Msg ID write fail");
+      show_status("Msg fail");
       }
       return false;
     }
@@ -1711,7 +1712,7 @@ static bool send_command_with_status(const char *command, const char *chat_id, c
       command ? command : "", (int)result, (unsigned)heap_bytes_free());
   if (result != APP_MSG_OK) {
     if (show_failures) {
-      show_status("Command send fail");
+    show_status("Send fail");
     }
     return false;
   }
@@ -1730,7 +1731,7 @@ static const char *default_status_text(void) {
   if (s_view_state == ViewStateChatList) {
     switch (s_list_mode) {
       case ListModeSubreddits:
-        return "Subreddits";
+        return "Pinned";
       case ListModeSorts:
         return "Sorts";
       case ListModeTasks:
@@ -2138,8 +2139,10 @@ static void chat_menu_select_callback(struct MenuLayer *menu_layer, MenuIndex *c
     request_subreddits();
     return;
   }
-  if (s_list_mode == ListModeChats &&
-      strncmp(s_chats[s_selected_chat].id, "__feed_", 7) == 0) {
+  if ((s_list_mode == ListModeChats || s_list_mode == ListModeGroupChats) &&
+      (strncmp(s_chats[s_selected_chat].id, "__feed_", 7) == 0 ||
+       strcmp(s_chats[s_selected_chat].id, "__pin") == 0 ||
+       strcmp(s_chats[s_selected_chat].id, "__subs") == 0)) {
     lock_interactions(700);
     request_group_chats(s_chats[s_selected_chat].id, s_chats[s_selected_chat].title);
     return;
@@ -2304,6 +2307,12 @@ static void clear_message_slot(Message *message) {
 }
 
 static void clear_message_rows(void) {
+  if (!s_messages) {
+    s_message_count = 0;
+    s_selected_message = -1;
+    reset_image_transfer_state();
+    return;
+  }
   for (int i = 0; i < MAX_MESSAGES; i++) {
     clear_message_slot(&s_messages[i]);
   }
@@ -3018,11 +3027,20 @@ static bool subreddit_detail_row_is_top_post(int index) {
   return index == 0;
 }
 
+static int subreddit_detail_depth_for_index(int index) {
+  if (index < 0 || index >= s_message_count || !s_messages[index].section[0] ||
+      s_messages[index].section[0] != 'd') {
+    return 0;
+  }
+  int depth = s_messages[index].section[1] - '0';
+  return PG_MAX(0, PG_MIN(2, depth));
+}
+
 static int subreddit_detail_indent_for_index(int index) {
   if (subreddit_detail_row_is_top_post(index)) {
     return 4;
   }
-  return ROUND_UI ? 14 : 12;
+  return (ROUND_UI ? 12 : 10) + subreddit_detail_depth_for_index(index) * 8;
 }
 
 static int subreddit_detail_bubble_width(GRect safe, int index) {
@@ -3034,6 +3052,30 @@ static int subreddit_detail_bubble_width(GRect safe, int index) {
 static bool message_is_thread_marker(Message *message) {
   return message && (strcmp(message->section, "more") == 0 ||
                      strcmp(message->section, "collapsed") == 0);
+}
+
+static bool metadata_has_saved(const char *text) {
+  return text && strstr(text, "saved") != NULL;
+}
+
+static bool subreddit_target_saved(const char *chat_id, const char *message_id) {
+  if (message_id && message_id[0]) {
+    Message *message = find_message_by_id(message_id);
+    return message && (metadata_has_saved(message->meta) || metadata_has_saved(message->reactions));
+  }
+  int chat_index = find_chat_index_by_id(chat_id && chat_id[0] ? chat_id : s_current_chat_id);
+  return chat_index >= 0 && s_chats && s_chats[chat_index].unread_count > 0;
+}
+
+static bool selected_reddit_saved(void) {
+  if (subreddit_detail_active() && has_selected_message()) {
+    Message *message = &s_messages[s_selected_message];
+    return metadata_has_saved(message->meta) || metadata_has_saved(message->reactions);
+  }
+  if (s_selected_chat >= 0 && s_selected_chat < s_chat_count && s_chats) {
+    return s_chats[s_selected_chat].unread_count > 0;
+  }
+  return false;
 }
 
 #define draw_text_safe(ctx, text, font, rect, overflow, alignment) \
@@ -3051,7 +3093,7 @@ static int subreddit_post_height(Message *message, int text_w) {
   }
 #if MEDIA_ENABLED
   if (message->image_placeholder) {
-    image_h = message_image_display_height(message, PG_MIN(IMAGE_THUMB_SIZE + IMAGE_FRAME_EXTRA_W, text_w)) + 8;
+    image_h = message_image_display_height(message, text_w) + 8;
   }
 #endif
   GSize size = GSize(0, 0);
@@ -3646,7 +3688,11 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
     message_preview_text(message, display_text, sizeof(display_text));
 
     if (subreddit && message_is_thread_marker(message)) {
-      graphics_context_set_text_color(ctx, BW_UI ? GColorBlack : GColorDarkGray);
+      if (selected) {
+        graphics_context_set_fill_color(ctx, BW_UI ? GColorWhite : SELECTOR_COLOR);
+        graphics_fill_rect(ctx, GRect(x + 2, y, bubble_w - 4, bubble_h), 4, GCornersAll);
+      }
+      graphics_context_set_text_color(ctx, selected ? GColorWhite : (BW_UI ? GColorBlack : GColorDarkGray));
       draw_text_safe(ctx, display_text,
                      fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
                      GRect(x + 4, y + 1, bubble_w - 8, bubble_h),
@@ -3776,7 +3822,7 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
     int image_h = 0;
 #if MEDIA_ENABLED
     image_h = message->image_placeholder ?
-              message_image_display_height(message, message_image_frame_width(bubble_w)) + 8 : 0;
+              message_image_display_height(message, message_image_frame_width_for_index(i, bounds)) + 8 : 0;
 #endif
     int text_rect_h = bubble_h - name_h - context_h - image_h - reaction_h - 6;
     if (display_text[0] && text_rect_h > 0 && content_text_w > 4) {
@@ -3787,14 +3833,13 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
 
 #if MEDIA_ENABLED
     if (message->image_placeholder) {
-      int max_image_w = PG_MIN(message_image_frame_width(bubble_w), content_text_w);
+      int max_image_w = PG_MIN(message_image_frame_width_for_index(i, bounds), content_text_w);
       int image_w = message_image_display_width(message, max_image_w);
       int image_h = message_image_display_height(message, max_image_w);
       GRect image_rect = GRect(content_x + 5,
                               y + bubble_h - reaction_h - image_h - 4,
                               image_w, image_h);
       bool image_visible = image_rect.size.w > 0 && image_rect.size.h > 0 &&
-                           image_rect.origin.y >= 0 &&
                            image_rect.origin.y < bounds.size.h &&
                            image_rect.origin.y + image_rect.size.h > 0;
       if (image_visible && message->image_bitmap) {
@@ -3838,16 +3883,17 @@ static void messages_root_update_proc(Layer *layer, GContext *ctx) {
       int meta_w = message->meta[0] ? (message->reactions[0] ? PG_MIN(74, text_w / 2) : text_w) : 0;
       graphics_context_set_text_color(ctx, BW_UI ? GColorBlack : GColorDarkGray);
       if (subreddit) {
+        int side_w = message->reactions[0] ? PG_MIN(64, content_text_w / 2) : 0;
         if (message->meta[0]) {
           draw_text_safe(ctx, message->meta, reaction_font,
                          GRect(content_x + 7, y + bubble_h - reaction_h - 1,
-                               PG_MAX(1, content_text_w - (message->reactions[0] ? 40 : 0)), reaction_h),
+                               PG_MAX(1, content_text_w - side_w - 4), reaction_h),
                          GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
         }
         if (message->reactions[0]) {
           draw_text_safe(ctx, message->reactions, reaction_font,
-                         GRect(content_x + content_text_w - 34, y + bubble_h - reaction_h - 1,
-                               34, reaction_h),
+                         GRect(content_x + content_text_w - side_w, y + bubble_h - reaction_h - 1,
+                               side_w, reaction_h),
                          GTextOverflowModeTrailingEllipsis, GTextAlignmentRight);
         }
       } else if (message->reactions[0]) {
@@ -4255,11 +4301,17 @@ static void request_list_rows(const char *command, const char *id, const char *t
 }
 
 static void request_subreddits(void) {
-  request_list_rows("get_subreddits", NULL, NULL, ListModeSubreddits, "Loading subreddits...");
+  request_list_rows("get_subreddits", NULL, NULL, ListModeSubreddits, "Loading pinned");
 }
 
 static void request_group_chats(const char *feed_id, const char *feed_title) {
-  request_list_rows("get_group_chats", feed_id, feed_title, ListModeGroupChats, "Loading posts...");
+  const char *loading = "Loading posts...";
+  if (feed_id && strcmp(feed_id, "__subs") == 0) {
+    loading = "Loading subs...";
+  } else if (feed_id && strcmp(feed_id, "__pin") == 0) {
+    loading = "Loading pinned";
+  }
+  request_list_rows("get_group_chats", feed_id, feed_title, ListModeGroupChats, loading);
 }
 
 static void request_sorts(const char *plan_id, const char *plan_title) {
@@ -4462,7 +4514,7 @@ static void message_timeout_timer_callback(void *data) {
     s_loading_error = true;
     unlock_interactions_now();
     show_loading_text((s_list_mode == ListModeChats || s_list_mode == ListModeGroupChats) ?
-                      "Chats failed" : "Subreddits failed", true);
+                      "Chats failed" : "Pinned failed", true);
     show_status(default_status_text());
     if (s_chat_menu) {
       menu_layer_reload_data(s_chat_menu);
@@ -4511,10 +4563,11 @@ static bool send_active_image_request(void) {
     return false;
   }
   unsigned budget = image_request_decode_cost_budget();
-  char request_text[18];
-  snprintf(request_text, sizeof(request_text), "%u:%u",
+  char request_text[24];
+  snprintf(request_text, sizeof(request_text), "%u:%u:%u",
            (unsigned)message->image_retry_level,
-           budget);
+           budget,
+           (unsigned)MAX_IMAGE_BYTES);
   IMAGE_DIAG("PGIMG watch request msg=%s attempt=%u index=%d selected=%d budget=%u heap=%u",
              message->image_token, (unsigned)message->image_retry_level,
              image_index, s_selected_message, budget, image_diag_heap_free());
@@ -4732,7 +4785,7 @@ static void request_newer_messages(bool silent) {
     }
     return;
   }
-  if (s_at_newest) {
+  if (s_at_newest && !subreddit_detail_active()) {
     if (!silent) {
       scroll_to_bottom(true);
     }
@@ -4888,7 +4941,14 @@ static bool latest_message_target_is_visible(void) {
 }
 
 static bool selected_message_is_truncated(void) {
+  if (subreddit_detail_active() && has_selected_message() && !selected_message_is_thread_marker()) {
+    return true;
+  }
   return has_selected_message() && message_display_is_truncated(&s_messages[s_selected_message]);
+}
+
+static bool selected_message_is_thread_marker(void) {
+  return has_selected_message() && message_is_thread_marker(&s_messages[s_selected_message]);
 }
 
 static bool selected_message_has_context(void) {
@@ -4898,25 +4958,6 @@ static bool selected_message_has_context(void) {
 static bool selected_message_context_is_forward(void) {
   return selected_message_has_context() &&
          strncmp(s_messages[s_selected_message].context, "Fwd from ", 9) == 0;
-}
-
-static const ReactionChoice *reaction_grid_choices(void) {
-  return REACTION_GRID_CHOICES;
-}
-
-static int reaction_grid_count(void) {
-  return (int)(sizeof(REACTION_GRID_CHOICES) / sizeof(REACTION_GRID_CHOICES[0]));
-}
-
-static int emoji_reply_count(void) {
-  return (int)(sizeof(EMOJI_REPLY_CHOICES) / sizeof(EMOJI_REPLY_CHOICES[0]));
-}
-
-static const char *emoji_reply_glyph_at(int index) {
-  if (index < 0 || index >= emoji_reply_count()) {
-    return "";
-  }
-  return EMOJI_REPLY_CHOICES[index];
 }
 
 static void send_selected_chat_action(const char *command) {
@@ -5456,14 +5497,14 @@ static void run_subreddit_intent(const SubredditsIntent *intent) {
     case ActionItemSubredditsMarkActive:
     case ActionItemSubredditsDownvote:
     case ActionItemDeletePost: {
-      const char *command = "archive_chat";
+      const char *command = "save";
       const char *status = "Saving...";
       if (!intent->chat_id[0]) {
         cancel_stale_subreddit_intent();
         return;
       }
       if (intent->item == ActionItemSubredditsComplete) {
-        command = "complete_task";
+        command = intent->message_id[0] ? "upvote" : "complete_task";
         status = "Upvoting...";
       } else if (intent->item == ActionItemSubredditsDownvote) {
         command = "downvote";
@@ -5471,6 +5512,10 @@ static void run_subreddit_intent(const SubredditsIntent *intent) {
       } else if (intent->item == ActionItemSubredditsMarkActive) {
         command = "uncomplete_task";
         status = "Clearing vote...";
+      } else if (intent->item == ActionItemDeletePost &&
+                 subreddit_target_saved(intent->chat_id, intent->message_id)) {
+        command = "unsave";
+        status = "Unsaving...";
       }
       show_status(status);
       queue_subreddit_command(command, intent->chat_id, NULL,
@@ -5666,7 +5711,6 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
   }
 
   if (strcmp(type, "settings") == 0) {
-    update_canned_replies(tuple_cstring(iter, MESSAGE_KEY_CannedReplies));
     update_subreddit_labels(tuple_cstring(iter, MESSAGE_KEY_PlannerLabels));
     return;
   }
@@ -5800,7 +5844,7 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
       s_loading_newer_messages = false;
       s_older_anchor_id[0] = '\0';
       s_newer_anchor_id[0] = '\0';
-      s_at_newest = true;
+      s_at_newest = !subreddit_detail_active();
       s_at_oldest = false;
     } else if (requested_page && !prepare_message_stage()) {
       reset_message_stream_state();
@@ -6391,6 +6435,7 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
       bool dimensions_changed = message->image_width != image_width || message->image_height != image_height;
       message->image_width = (uint16_t)image_width;
       message->image_height = (uint16_t)image_height;
+      set_message_image_progress(message, 1);
       if (dimensions_changed) {
         recalc_message_layout();
       }
@@ -6525,7 +6570,7 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
         destroy_other_message_images(message);
         reset_avatar_transfer_state();
         free_full_text_body();
-        if (s_image_is_pbi && message_image_decode_has_headroom(message)) {
+        if (s_image_is_pbi) {
           attempted_decode = true;
           message->image_bitmap = gbitmap_create_with_data(s_image_buffer);
           if (message->image_bitmap) {
@@ -6539,9 +6584,7 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
         }
         if (!s_image_is_pbi && !message->image_bitmap && s_loaded_image_count > 0) {
           destroy_other_message_images(message);
-          if (message_image_decode_has_headroom(message)) {
-            message->image_bitmap = gbitmap_create_from_png_data(s_image_buffer, s_image_size);
-          }
+          message->image_bitmap = gbitmap_create_from_png_data(s_image_buffer, s_image_size);
         }
         if (message->image_bitmap) {
           message->image_failed = false;
@@ -6590,6 +6633,8 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
     }
     if (is_active_image && !retrying_image) {
       request_next_image();
+    } else if (!retrying_image) {
+      request_next_image();
     }
     return;
   }
@@ -6626,6 +6671,8 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
       layer_mark_dirty(s_messages_root);
     }
     if (is_active_image) {
+      request_next_image();
+    } else {
       request_next_image();
     }
     return;
@@ -6846,6 +6893,9 @@ static int action_item_count(void) {
   switch (s_action_mode) {
     case ActionMenuMain:
       if (subreddit_detail_active()) {
+        if (selected_message_is_thread_marker()) {
+          return 1;
+        }
         int count = has_selected_message() ? 4 : 3;
         if (selected_message_is_truncated()) {
           count++;
@@ -6853,7 +6903,7 @@ static int action_item_count(void) {
         return count;
       }
       if (!has_selected_message()) {
-        return 4;
+        return 2;
       }
       return 3 +
              (s_messages[s_selected_message].outgoing ? 1 : 0) +
@@ -6862,15 +6912,14 @@ static int action_item_count(void) {
     case ActionMenuChat:
       return 3;
     case ActionMenuCanned:
-      return canned_reply_count();
+      return 0;
     case ActionMenuConfirm:
       return 2;
     case ActionMenuReply:
-      return 3;
+      return 1;
     case ActionMenuReactionGrid:
-      return reaction_grid_count();
     case ActionMenuEmojiReplyGrid:
-      return emoji_reply_count();
+      return 0;
     case ActionMenuPost:
       return 4;
     case ActionMenuChecklistList:
@@ -6982,13 +7031,7 @@ static ActionItem action_item_at(int index) {
     case ActionMenuAssignMembers:
       return ActionItemAssignMember;
     case ActionMenuReply:
-      if (index == 0) {
-        return ActionItemReplyDictate;
-      }
-      if (index == 1) {
-        return ActionItemReplyCanned;
-      }
-      return ActionItemReplyEmoji;
+      return ActionItemReplyDictate;
     case ActionMenuChat:
       if (index == 0) {
         return ActionItemArchiveChat;
@@ -6998,13 +7041,12 @@ static ActionItem action_item_at(int index) {
       }
       return ActionItemGoBack;
     case ActionMenuCanned:
-      return s_pending_send_as_reply ? ActionItemReplyCanned : ActionItemCanned;
+      return ActionItemGoBack;
     case ActionMenuConfirm:
       return index == 0 ? ActionItemConfirmSend : ActionItemConfirmCancel;
     case ActionMenuReactionGrid:
-      return ActionItemReact;
     case ActionMenuEmojiReplyGrid:
-      return s_pending_send_as_reply ? ActionItemReplyEmoji : ActionItemEmoji;
+      return ActionItemGoBack;
     case ActionMenuMain:
       break;
     case ActionMenuFullText:
@@ -7012,6 +7054,9 @@ static ActionItem action_item_at(int index) {
   }
 
   if (subreddit_detail_active()) {
+    if (selected_message_is_thread_marker()) {
+      return ActionItemOpenPost;
+    }
     int target = 0;
     if (has_selected_message() && index == target++) {
       return ActionItemReply;
@@ -7032,13 +7077,10 @@ static ActionItem action_item_at(int index) {
   }
 
   if (!has_selected_message()) {
-    static const ActionItem compose_items[] = {
-      ActionItemCompose,
-      ActionItemCanned,
-      ActionItemReplyEmoji,
-      ActionItemGoToBottom
-    };
-    return compose_items[index];
+    if (index == 0) {
+      return ActionItemCompose;
+    }
+    return ActionItemGoToBottom;
   }
 
   int target = 0;
@@ -7066,11 +7108,10 @@ static ActionItem action_item_at(int index) {
 static bool action_item_has_chevron(int index) {
   if (s_action_mode == ActionMenuMain) {
     ActionItem item = action_item_at(index);
-    return item == ActionItemReplyEmoji ||
-           (subreddit_detail_active() && item == ActionItemReply);
+    return subreddit_detail_active() && item == ActionItemReply;
   }
   if (s_action_mode == ActionMenuReply) {
-    return index == 2;
+    return false;
   }
   if (s_action_mode == ActionMenuAssign) {
     ActionItem item = action_item_at(index);
@@ -7112,12 +7153,7 @@ static const char *action_item_title(int index) {
     return chat_items[index];
   }
   if (s_action_mode == ActionMenuReply) {
-    static const char *reply_items[] = {
-      "Dictate Reply",
-      "Canned Message",
-      "Emoji"
-    };
-    return reply_items[index];
+    return "Dictate Reply";
   }
   if (s_action_mode == ActionMenuMain) {
     ActionItem item = action_item_at(index);
@@ -7125,11 +7161,11 @@ static const char *action_item_title(int index) {
       case ActionItemCompose:
         return "Voice";
       case ActionItemCanned:
-        return "Canned Message";
+      case ActionItemReact:
+      case ActionItemReplyEmoji:
+        return "";
       case ActionItemReply:
         return "Reply";
-      case ActionItemReact:
-        return "React";
       case ActionItemSubredditsDownvote:
         return "Downvote";
       case ActionItemEdit:
@@ -7144,8 +7180,6 @@ static const char *action_item_title(int index) {
 #endif
       case ActionItemFullContext:
         return selected_message_context_is_forward() ? "View Forward" : "View Quote";
-      case ActionItemReplyEmoji:
-        return "Emoji";
       case ActionItemGoToBottom:
         return "Go to Bottom";
       case ActionItemSubredditsAddNote:
@@ -7157,11 +7191,11 @@ static const char *action_item_title(int index) {
       case ActionItemSubredditsComplete:
         return "Upvote";
       case ActionItemOpenPost:
-        return "Open Comments";
+        return selected_message_is_thread_marker() ? "Load More" : "Open Comments";
       case ActionItemCompletedPosts:
         return "Saved Posts";
       case ActionItemDeletePost:
-        return "Save";
+        return selected_reddit_saved() ? "Unsave" : "Save";
       case ActionItemChecklistEditList:
         return "Edit List";
       case ActionItemChecklistDeleteList:
@@ -7226,8 +7260,6 @@ static const char *action_item_title(int index) {
         return "Team";
       case ActionItemAssignMember:
         return "Member";
-      case ActionItemSubredditsPin:
-        return "Pin Subreddits";
       case ActionItemEmoji:
       case ActionItemConfirmSend:
       case ActionItemConfirmCancel:
@@ -7241,19 +7273,17 @@ static const char *action_item_title(int index) {
     }
   }
   if (s_action_mode == ActionMenuPost) {
-    static const char *post_items[] = {
-      "Open Comments",
-      "Upvote",
-      "Downvote",
-      "Save"
-    };
+    static const char *post_items[] = {"Open Comments", "Upvote", "Downvote", "Save"};
     if (s_viewing_completed_tasks && index == 1) {
       return "Clear Vote";
+    }
+    if (index == 3) {
+      return selected_reddit_saved() ? "Unsave" : "Save";
     }
     return (index >= 0 && index < 4) ? post_items[index] : "Post";
   }
   if (s_action_mode == ActionMenuCanned) {
-    return s_canned[index][0] ? s_canned[index] : "Canned message";
+    return "";
   }
   if (s_action_mode == ActionMenuChecklistList) {
     static const char *checklist_items[] = {
@@ -7460,55 +7490,6 @@ static void action_layer_update_proc(Layer *layer, GContext *ctx) {
                        GRect(content_x + 6, 8 + heading_h - s_full_text_scroll_offset,
                              text_w, text_size.h + 16),
                        GTextOverflowModeWordWrap, GTextAlignmentLeft, NULL);
-    return;
-  }
-
-  if (s_action_mode == ActionMenuReactionGrid || s_action_mode == ActionMenuEmojiReplyGrid) {
-    int cols = 3;
-    int cell_h = ROUND_UI ? 40 : 44;
-    int cell_w = content_w / cols;
-    int rows = (count + cols - 1) / cols;
-    int selected_row = s_action_selected / cols;
-    int visible_rows = PG_MAX(1, bounds.size.h / cell_h);
-    int first_row = selected_row - (visible_rows / 2);
-    int max_first_row = PG_MAX(0, rows - visible_rows);
-    int visible_h;
-    int top;
-
-    first_row = PG_MAX(0, PG_MIN(first_row, max_first_row));
-    visible_h = PG_MIN(rows, visible_rows) * cell_h;
-    top = PG_MAX(0, (bounds.size.h - visible_h) / 2);
-
-    for (int i = 0; i < count; i++) {
-      int row_index = i / cols;
-      int col_index = i % cols;
-      int y = top + ((row_index - first_row) * cell_h);
-      GRect cell = GRect(content_x + (col_index * cell_w), y, cell_w, cell_h);
-      bool selected = i == s_action_selected;
-
-      if (y + cell_h < 0 || y > bounds.size.h) {
-        continue;
-      }
-      if (selected) {
-        graphics_context_set_fill_color(ctx, APP_COLOR);
-        graphics_fill_rect(ctx, cell, 4, GCornersAll);
-      }
-      graphics_context_set_text_color(ctx, selected ? GColorWhite : GColorLightGray);
-      if (s_action_mode == ActionMenuReactionGrid &&
-          strcmp(reaction_grid_choices()[i].token, "remove") == 0) {
-        graphics_draw_text(ctx, reaction_grid_choices()[i].glyph,
-                           fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                           GRect(cell.origin.x, cell.origin.y + 10, cell.size.w, cell.size.h - 10),
-                           GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-      } else {
-        const char *glyph = s_action_mode == ActionMenuEmojiReplyGrid ?
-                            emoji_reply_glyph_at(i) : reaction_grid_choices()[i].glyph;
-        graphics_draw_text(ctx, glyph,
-                           fonts_get_system_font(FONT_KEY_GOTHIC_28),
-                           GRect(cell.origin.x, cell.origin.y + 4, cell.size.w, cell.size.h - 4),
-                           GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-      }
-    }
     return;
   }
 
@@ -7760,36 +7741,12 @@ static void action_select_click_handler(ClickRecognizerRef recognizer, void *con
       return;
     case ActionItemCanned:
     case ActionItemReplyCanned:
-      if (selected >= 0 && selected < canned_reply_count()) {
-        s_pending_edit_message_id[0] = '\0';
-        s_pending_chat_command[0] = '\0';
-        s_pending_send_as_reply = item == ActionItemReplyCanned;
-        copy_cstr(s_pending_text, sizeof(s_pending_text), s_canned[selected]);
-        close_action_window();
-        show_action_window(ActionMenuConfirm);
-      } else {
-        close_action_window();
-        show_status("Action canceled");
-      }
-      return;
     case ActionItemEmoji:
     case ActionItemReplyEmoji:
-      if (mode == ActionMenuMain || mode == ActionMenuReply) {
-        s_pending_send_as_reply = item == ActionItemReplyEmoji;
-        close_action_window();
-        show_action_window(ActionMenuEmojiReplyGrid);
-        return;
-      }
-      if (selected >= 0 && selected < emoji_reply_count()) {
-        send_text_message(emoji_reply_glyph_at(selected), item == ActionItemReplyEmoji);
-        s_pending_send_as_reply = false;
-      }
       close_action_window();
+      show_status("Action unavailable");
       return;
     case ActionItemReply:
-      close_action_window();
-      show_action_window(ActionMenuReply);
-      return;
     case ActionItemReplyDictate:
       s_pending_edit_message_id[0] = '\0';
       s_pending_chat_command[0] = '\0';
@@ -7798,18 +7755,8 @@ static void action_select_click_handler(ClickRecognizerRef recognizer, void *con
       schedule_dictation_start();
       return;
     case ActionItemReact:
-      if (mode == ActionMenuMain) {
-        close_action_window();
-        show_action_window(ActionMenuReactionGrid);
-        return;
-      }
-      if (has_selected_message() && selected >= 0 && selected < reaction_grid_count()) {
-        const char *token = REACTION_GRID_CHOICES[selected].token;
-        show_status((token && strcmp(token, "remove") == 0) ? "Removing..." : "Reacting...");
-        send_command("send_reaction", s_current_chat_id, token, NULL,
-                     s_messages[s_selected_message].id);
-      }
       close_action_window();
+      show_status("Action unavailable");
       return;
     case ActionItemEdit:
       if (has_selected_message() && s_messages[s_selected_message].outgoing) {
@@ -7846,15 +7793,11 @@ static void action_select_click_handler(ClickRecognizerRef recognizer, void *con
       copy_cstr(s_full_text_body, MAX_FULL_TEXT, s_messages[s_selected_message].text);
       send_command_with_status("get_message_text", s_current_chat_id, NULL, NULL,
                                s_full_text_message_id, false);
-      if (s_list_mode == ListModeChats) {
-        s_full_text_unloaded_messages = true;
-        clear_message_rows();
-        set_chat_scroll_offset_quiet(0);
-        if (s_messages_root) {
-          layer_mark_dirty(s_messages_root);
-        }
-      } else {
-        s_full_text_unloaded_messages = false;
+      s_full_text_unloaded_messages = true;
+      clear_message_rows();
+      set_chat_scroll_offset_quiet(0);
+      if (s_messages_root) {
+        layer_mark_dirty(s_messages_root);
       }
       s_full_text_scroll_offset = 0;
       show_action_window(ActionMenuFullText);
@@ -7966,7 +7909,6 @@ static void action_select_click_handler(ClickRecognizerRef recognizer, void *con
     case ActionItemSubredditsComplete:
     case ActionItemSubredditsMarkActive:
     case ActionItemSubredditsDownvote:
-    case ActionItemOpenPost:
     case ActionItemDeletePost:
     case ActionItemChecklistEditList:
     case ActionItemChecklistDeleteList:
@@ -7978,6 +7920,19 @@ static void action_select_click_handler(ClickRecognizerRef recognizer, void *con
     case ActionItemProgressChoice:
     case ActionItemLabelChoice:
     case ActionItemBucketChoice:
+      capture_subreddit_intent(item, selected);
+      close_action_window();
+      schedule_captured_subreddit_intent(200);
+      return;
+    case ActionItemOpenPost:
+      if (subreddit_detail_active() && selected_message_is_thread_marker()) {
+        char message_id[MAX_ID];
+        copy_cstr(message_id, sizeof(message_id), s_messages[s_selected_message].id);
+        close_action_window();
+        show_status("Loading replies...");
+        send_command_with_status("expand_replies", s_current_chat_id, NULL, NULL, message_id, true);
+        return;
+      }
       capture_subreddit_intent(item, selected);
       close_action_window();
       schedule_captured_subreddit_intent(200);
@@ -8173,17 +8128,11 @@ static void action_back_click_handler(ClickRecognizerRef recognizer, void *conte
     return;
   }
   lock_interactions(300);
-  if (s_action_mode == ActionMenuFullText && subreddit_detail_active()) {
-    free_full_text_body();
-    close_action_window();
-    return;
-  }
   if (s_action_mode == ActionMenuCanned || s_action_mode == ActionMenuConfirm ||
       s_action_mode == ActionMenuReply || s_action_mode == ActionMenuReactionGrid ||
       s_action_mode == ActionMenuEmojiReplyGrid || s_action_mode == ActionMenuFullText) {
     if (s_action_mode == ActionMenuFullText) {
-      bool restore_messages = s_full_text_unloaded_messages && s_full_text_message_id[0] &&
-                              s_list_mode == ListModeChats;
+      bool restore_messages = s_full_text_unloaded_messages && s_full_text_message_id[0];
       char restore_id[MAX_ID];
       restore_id[0] = '\0';
       if (restore_messages) {
@@ -8235,6 +8184,14 @@ static void main_select_click_handler(ClickRecognizerRef recognizer, void *conte
     return;
   }
   if (s_view_state == ViewStateChat) {
+    if (subreddit_detail_active() && selected_message_is_thread_marker()) {
+      char message_id[MAX_ID];
+      copy_cstr(message_id, sizeof(message_id), s_messages[s_selected_message].id);
+      lock_interactions(350);
+      show_status("Loading replies...");
+      send_command_with_status("expand_replies", s_current_chat_id, NULL, NULL, message_id, true);
+      return;
+    }
     if (s_list_mode == ListModeTasks) {
       lock_interactions(350);
       show_action_window(ActionMenuMain);
@@ -8378,9 +8335,6 @@ static void main_up_click_handler(ClickRecognizerRef recognizer, void *context) 
   int top = s_message_y[s_selected_message] - margin;
   int visible_top = clamp_scroll_offset(top);
   if (s_selected_message == 0 && s_chat_scroll_offset <= visible_top + 2) {
-    if (subreddit_detail_active()) {
-      return;
-    }
     if (s_loading_older_messages) {
       show_status("Loading older...");
     } else {
@@ -8498,13 +8452,13 @@ static void main_down_click_handler(ClickRecognizerRef recognizer, void *context
   } else if (s_loading_newer_messages) {
     show_status("Loading newer...");
   } else if (s_at_newest) {
-    if (!subreddit_detail_active()) {
+    if (subreddit_detail_active()) {
+      request_newer_messages(false);
+    } else {
       scroll_to_bottom(!repeating);
     }
   } else {
-    if (!subreddit_detail_active()) {
-      request_newer_messages(false);
-    }
+    request_newer_messages(false);
   }
 }
 
@@ -8670,6 +8624,14 @@ static void init(void) {
   s_view_state = ViewStateChatList;
   s_selected_message = -1;
   s_chats_loading = true;
+  s_heap_state = calloc(1, sizeof(PebbitHeapState));
+  s_messages = calloc(MAX_MESSAGES, sizeof(Message));
+  s_message_y = calloc(MAX_MESSAGES, sizeof(int));
+  s_message_h = calloc(MAX_MESSAGES, sizeof(int));
+  if (!s_heap_state || !s_messages || !s_message_y || !s_message_h) {
+    s_chats_loading = false;
+    return;
+  }
   for (int i = 0; i < MAX_MESSAGES; i++) {
     init_message_strings(&s_messages[i]);
   }
@@ -8759,6 +8721,22 @@ static void deinit(void) {
   clear_subreddit_intent();
   clear_chat_rows();
   destroy_message_images();
+  clear_message_rows();
+  if (s_messages) {
+    for (int i = 0; i < MAX_MESSAGES; i++) {
+      release_message_strings(&s_messages[i]);
+    }
+    free(s_messages);
+    s_messages = NULL;
+  }
+  if (s_message_y) {
+    free(s_message_y);
+    s_message_y = NULL;
+  }
+  if (s_message_h) {
+    free(s_message_h);
+    s_message_h = NULL;
+  }
   if (s_chats) {
     free(s_chats);
     s_chats = NULL;
@@ -8800,6 +8778,10 @@ static void deinit(void) {
   }
 #endif
   window_destroy(s_main_window);
+  if (s_heap_state) {
+    free(s_heap_state);
+    s_heap_state = NULL;
+  }
 }
 
 int main(void) {

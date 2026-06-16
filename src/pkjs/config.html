@@ -127,16 +127,17 @@
 <body>
   <main>
     <h1>Pebbit</h1>
-    <p class="lede">Personal Reddit client settings. No post creation is exposed in this app.</p>
+    <p class="lede">Reddit client settings. Each user should use their own Reddit installed-app client ID. No post creation is exposed in this app.</p>
 
     <section class="panel">
       <strong>Status:</strong> <span id="signedInStatus">Not signed in.</span>
-      <p class="hint">Register a Reddit installed app, set its redirect URI to the value below, save, open this page again, then sign in and paste either the code or the full redirected URL. Pebbit ignores trailing #_ automatically.</p>
+      <p class="hint">Create an installed app at Reddit, copy its client ID here, and set its redirect URI to the exact value below. Installed apps do not use a client secret.</p>
+      <p class="hint">Save, reopen this page, sign in, then paste either the code or the full redirected URL. Pebbit ignores trailing #_ automatically.</p>
       <p class="hint">Hosted callback: <code>https://tombolger.github.io/Pebbit/reddit-callback.html</code><br>Local fallback: <code>http://localhost:65010/pebbit</code></p>
       <a id="signin" class="btn" href="#">Sign in with Reddit</a>
     </section>
 
-    <label for="clientId">Reddit client ID</label>
+    <label for="clientId">Reddit app client ID</label>
     <input id="clientId" type="text" placeholder="Installed app client ID">
 
     <label for="redirectUri">Redirect URI</label>
@@ -162,7 +163,7 @@
       <option value="old">Old</option>
     </select>
 
-    <label for="subreddits">Visible subreddits</label>
+    <label for="subreddits">Pinned Communities</label>
     <textarea id="subreddits" placeholder="pebble&#10;pebblewatch&#10;programming"></textarea>
 
     <label for="hiddenSubreddits">Hidden subreddits</label>
@@ -185,6 +186,9 @@
       <summary>Advanced</summary>
       <label for="scopes">OAuth scopes</label>
       <input id="scopes" type="text">
+      <label for="userAgent">User-Agent</label>
+      <input id="userAgent" type="text">
+      <div class="hint">Keep this descriptive if you publish a fork or custom build.</div>
     </details>
 
     <div class="savebar">
@@ -304,7 +308,8 @@
         cannedReplies: lines('cannedReplies'),
         showNsfw: v('showNsfw').checked ? '1' : '',
         mockMode: v('mockMode').checked ? '1' : '0',
-        scopes: v('scopes').value.trim() || defaultScopes
+        scopes: v('scopes').value.trim() || defaultScopes,
+        userAgent: v('userAgent').value.trim() || defaultUserAgent
       };
     }
 
@@ -317,6 +322,7 @@
     var defaultRedirectUri = 'https://tombolger.github.io/Pebbit/reddit-callback.html';
     var defaultSubreddits = 'pebble|pebblewatch|programming|technology|AskReddit';
     var defaultReplies = 'Yes|No|Thanks|I agree|Good point';
+    var defaultUserAgent = 'Pebbit/0.1 PebbleOS Reddit client';
 
     v('clientId').value = queryValue('clientId', '');
     v('redirectUri').value = queryValue('redirectUri', defaultRedirectUri);
@@ -330,6 +336,7 @@
     v('showNsfw').checked = queryValue('showNsfw', '') === '1';
     v('mockMode').checked = queryValue('mockMode', '') === '1';
     v('scopes').value = queryValue('scopes', defaultScopes);
+    v('userAgent').value = queryValue('userAgent', defaultUserAgent);
     v('signedInStatus').textContent = query.refreshToken || query.signedIn === '1' ? 'Reddit refresh token saved.' : 'Not signed in.';
 
     v('clientId').addEventListener('input', updateSignin);
